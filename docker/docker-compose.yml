@@ -1,0 +1,18 @@
+services:
+  meal-planner:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: meal-planner
+    stdin_open: true
+    tty: true
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../src:/app/src
+    command: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REMINDERS_PROXY_URL=http://host.docker.internal:${REMINDERS_PROXY_PORT:-8765}
