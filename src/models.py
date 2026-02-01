@@ -77,3 +77,6 @@ class MealPlannerState(TypedDict):
     # Meal processing fields
     grocery_list: Optional[List[Ingredient]]
     reminders_added: Optional[bool]
+
+    # Error handling
+    error: Optional[str]  # Error message to surface to UI

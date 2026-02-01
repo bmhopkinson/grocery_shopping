@@ -12,6 +12,7 @@ Workflow:
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -22,10 +23,76 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 from langgraph.graph import START, END, StateGraph
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg_pool import AsyncConnectionPool
 
 from models import MealPlannerState
+
+
+# Module-level connection pool (singleton)
+_connection_pool: AsyncConnectionPool | None = None
+_checkpointer_instance: AsyncPostgresSaver | None = None
+
+
+async def get_checkpointer_async():
+    """Get the async checkpointer - AsyncPostgresSaver if DATABASE_URL is set, otherwise MemorySaver."""
+    global _connection_pool, _checkpointer_instance
+
+    # Return cached instance if available
+    if _checkpointer_instance is not None:
+        return _checkpointer_instance
+
+    database_url = os.environ.get("DATABASE_URL")
+
+    print(f"[DEBUG] get_checkpointer_async called, DATABASE_URL={'set' if database_url else 'not set'}")
+
+    if not database_url:
+        print("[DEBUG] Using MemorySaver (no DATABASE_URL)")
+        _checkpointer_instance = MemorySaver()
+        return _checkpointer_instance
+
+    print(f"[DEBUG] Connecting to PostgreSQL: {database_url.replace('mealplanner:mealplanner', 'mealplanner:***')}")
+
+    if _connection_pool is None:
+        try:
+            print("[DEBUG] Creating async connection pool...")
+            _connection_pool = AsyncConnectionPool(
+                conninfo=database_url,
+                max_size=20,
+                open=False,
+                kwargs={"autocommit": True, "prepare_threshold": 0}
+            )
+            await _connection_pool.open()
+            print("[DEBUG] Async connection pool created and opened successfully")
+        except Exception as e:
+            print(f"[ERROR] Failed to create async connection pool: {e}")
+            raise
+
+    try:
+        print("[DEBUG] Creating AsyncPostgresSaver...")
+        checkpointer = AsyncPostgresSaver(_connection_pool)
+        print("[DEBUG] Running checkpointer.setup()...")
+        await checkpointer.setup()
+        print("[DEBUG] AsyncPostgresSaver ready")
+        _checkpointer_instance = checkpointer
+        return checkpointer
+    except Exception as e:
+        print(f"[ERROR] Failed to setup AsyncPostgresSaver: {e}")
+        raise
+
+
+def get_checkpointer():
+    """Sync wrapper - returns None, caller must use get_checkpointer_async()."""
+    # For backwards compatibility with CLI mode, return MemorySaver if no DATABASE_URL
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return MemorySaver()
+    # Return None to signal that async initialization is needed
+    return None
+
+
 from nodes import (
     search_meals,
     parse_meals,
@@ -63,7 +130,7 @@ def build_meal_processing_subgraph() -> StateGraph:
     return builder.compile()
 
 
-def build_meal_planner_graph() -> StateGraph:
+def build_meal_planner_graph(checkpointer=None) -> StateGraph:
     """Build the meal planner graph with multiple entry points.
 
     Supports two entry modes:
@@ -101,7 +168,8 @@ def build_meal_planner_graph() -> StateGraph:
     # Subgraph to END
     builder.add_edge("process_meal", END)
 
-    checkpointer = MemorySaver()
+    if checkpointer is None:
+        checkpointer = get_checkpointer()
     return builder.compile(checkpointer=checkpointer)
 
 

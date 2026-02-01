@@ -28,8 +28,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from meal_planner import build_meal_planner_graph
+from meal_planner import build_meal_planner_graph, get_checkpointer_async
 from langgraph.types import Command
+
+
+# Shared checkpointer (initialized on startup)
+_checkpointer = None
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +49,7 @@ class Session:
         self.direct_url = direct_url
         self.preferred_sources = preferred_sources or []
         self.thread_id = f"session-{session_id}"
-        self.graph = build_meal_planner_graph()
+        self.graph = build_meal_planner_graph(checkpointer=_checkpointer)
         self.started = False
         self.completed = False
         self.last_state = None
@@ -110,6 +114,10 @@ async def stream_graph_execution(
     config = {"configurable": {"thread_id": session.thread_id}}
     graph = session.graph
 
+    print(f"[DEBUG] stream_graph_execution started for session {session.session_id}")
+    print(f"[DEBUG] thread_id: {session.thread_id}")
+    print(f"[DEBUG] initial_input: {initial_input is not None}, resume_input: {resume_input is not None}")
+
     try:
         # Determine what to invoke with
         if resume_input is not None:
@@ -119,6 +127,7 @@ async def stream_graph_execution(
         else:
             raise ValueError("Must provide either initial_input or resume_input")
 
+        print(f"[DEBUG] Starting graph.astream_events...")
         # Stream the graph execution
         async for event in graph.astream_events(invoke_input, config=config, version="v2"):
             event_type = event.get("event")
@@ -135,7 +144,7 @@ async def stream_graph_execution(
             # Check for completion after stream ends
 
         # After streaming, check the final state
-        state = graph.get_state(config)
+        state = await graph.aget_state(config)
         session.last_state = state
 
         # Check if we hit an interrupt
@@ -191,6 +200,12 @@ async def stream_graph_execution(
             session.completed = True
             values = state.values
 
+            # Check for errors in state
+            error = values.get("error")
+            if error:
+                yield sse_event("error", {"message": error})
+                return
+
             selected_meal = values.get("selected_meal")
             grocery_list = values.get("grocery_list", [])
             reminders_added = values.get("reminders_added", False)
@@ -218,8 +233,19 @@ async def stream_graph_execution(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Cleanup sessions on shutdown."""
+    """Initialize checkpointer on startup, cleanup on shutdown."""
+    global _checkpointer
+    print("[DEBUG] FastAPI lifespan startup - initializing checkpointer...")
+    try:
+        _checkpointer = await get_checkpointer_async()
+        print(f"[DEBUG] Checkpointer initialized: {type(_checkpointer).__name__}")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize checkpointer: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     yield
+    print("[DEBUG] FastAPI lifespan shutdown - clearing sessions...")
     sessions.clear()
 
 
@@ -251,7 +277,12 @@ async def start_plan(request: PlanRequest):
     Returns an SSE stream with events for the planning process.
     First event will be 'session_start' with the session_id needed for /resume.
     """
+    print(f"[DEBUG] /plan endpoint called")
+    print(f"[DEBUG] Request: cuisine_type={request.cuisine_type}, direct_url={request.direct_url}")
+    print(f"[DEBUG] _checkpointer type: {type(_checkpointer).__name__ if _checkpointer else 'None'}")
+
     session_id = str(uuid.uuid4())[:8]
+    print(f"[DEBUG] Creating session {session_id}...")
     session = Session(
         session_id,
         cuisine_type=request.cuisine_type,
@@ -259,6 +290,7 @@ async def start_plan(request: PlanRequest):
         preferred_sources=request.preferred_sources
     )
     sessions[session_id] = session
+    print(f"[DEBUG] Session {session_id} created, graph type: {type(session.graph).__name__}")
 
     initial_state = {
         "direct_url": request.direct_url if request.direct_url else None,

@@ -366,7 +366,8 @@ async def extract_ingredients(state: MealPlannerState) -> dict:
     except Exception as e:
         print(f"[DEBUG] Fetch error: {e}")
         ui.show_fetch_error(str(e))
-        return {"grocery_list": []}
+        error_msg = f"Failed to fetch recipe from {recipe_url}: {e}"
+        return {"grocery_list": [], "error": error_msg}
 
     # Try JSON-LD structured data first (most reliable)
     json_ld = extract_json_ld_recipe(html)
