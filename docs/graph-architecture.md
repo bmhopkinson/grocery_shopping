@@ -128,6 +128,229 @@ stateDiagram-v2
     extract --> [*]: error (403, etc.)
 ```
 
+## Graph State (`MealPlannerState`)
+
+The graph state is a `TypedDict` that accumulates data as nodes execute. Each node reads specific fields and returns updates that get merged into the state.
+
+### State Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `direct_url` | `Optional[str]` | Direct recipe URL (skips search flow) |
+| `cuisine_type` | `str` | User's cuisine preference (e.g., "italian") |
+| `preferred_sources` | `Optional[List[str]]` | Preferred recipe websites |
+| `search_results` | `Optional[str]` | Raw DuckDuckGo search results |
+| `meal_options` | `Optional[List[MealOption]]` | Parsed recipe options for selection |
+| `selected_meal` | `Optional[MealOption]` | User's chosen recipe |
+| `messages` | `List` | LangChain message history |
+| `refinement_count` | `int` | Number of search refinement iterations |
+| `refine_dishes` | `Optional[List[str]]` | Specific dish names for refined search |
+| `grocery_list` | `Optional[List[Ingredient]]` | Extracted/approved ingredients |
+| `reminders_added` | `Optional[bool]` | Whether items were added to Reminders |
+| `error` | `Optional[str]` | Error message to surface to UI |
+
+### State Updates by Node
+
+```mermaid
+flowchart LR
+    subgraph Initial["Initial State (from request)"]
+        init["cuisine_type<br/>direct_url<br/>preferred_sources"]
+    end
+
+    subgraph Search["Search Flow"]
+        search_meals["<b>search_meals</b><br/>━━━━━━━━━━━<br/>reads: cuisine_type<br/>writes: search_results"]
+        parse_meals["<b>parse_meals</b><br/>━━━━━━━━━━━<br/>reads: search_results, cuisine_type<br/>writes: meal_options, messages"]
+        validate["<b>validate_recipes</b><br/>━━━━━━━━━━━<br/>reads: meal_options, cuisine_type, refinement_count<br/>writes: meal_options, refinement_count, refine_dishes"]
+        refine["<b>refine_search</b><br/>━━━━━━━━━━━<br/>reads: cuisine_type, preferred_sources, refine_dishes, meal_options<br/>writes: meal_options, search_results, refine_dishes"]
+        present["<b>present_options</b><br/>━━━━━━━━━━━<br/>reads: meal_options, cuisine_type<br/>writes: selected_meal"]
+    end
+
+    subgraph Direct["Direct URL Flow"]
+        create["<b>create_meal_from_url</b><br/>━━━━━━━━━━━<br/>reads: direct_url<br/>writes: meal_options, selected_meal"]
+    end
+
+    subgraph Process["Meal Processing (Subgraph)"]
+        extract["<b>extract_ingredients</b><br/>━━━━━━━━━━━<br/>reads: selected_meal<br/>writes: grocery_list, error"]
+        review["<b>review_ingredients</b><br/>━━━━━━━━━━━<br/>reads: grocery_list<br/>writes: grocery_list"]
+        reminders["<b>add_to_reminders</b><br/>━━━━━━━━━━━<br/>reads: grocery_list<br/>writes: reminders_added"]
+    end
+
+    init --> search_meals
+    init --> create
+    search_meals --> parse_meals --> validate --> refine
+    validate --> present
+    refine --> validate
+    present --> extract
+    create --> extract
+    extract --> review --> reminders
+```
+
+### Detailed Node State Access
+
+#### `search_meals`
+```python
+# Reads
+cuisine = state["cuisine_type"]
+
+# Writes
+return {"search_results": results}
+```
+
+#### `parse_meals`
+```python
+# Reads
+search_results = state["search_results"]
+cuisine = state["cuisine_type"]
+
+# Writes
+return {
+    "meal_options": meal_options,
+    "messages": [AIMessage(content=display_text)]
+}
+```
+
+#### `validate_recipes`
+```python
+# Reads
+meal_options = state["meal_options"]
+cuisine = state["cuisine_type"]
+refinement_count = state.get("refinement_count", 0)
+
+# Writes (varies by condition)
+return {"meal_options": valid_recipes}
+# OR
+return {
+    "meal_options": valid_recipes,
+    "refinement_count": refinement_count + 1,
+    "refine_dishes": dish_names[:5]
+}
+```
+
+#### `refine_search`
+```python
+# Reads
+cuisine = state["cuisine_type"]
+sources = state.get("preferred_sources", [])
+dish_names = state.get("refine_dishes", [])
+existing_valid = state.get("meal_options", [])
+
+# Writes
+return {
+    "meal_options": unique_recipes[:5],
+    "search_results": combined_results,
+    "refine_dishes": None  # Clear to exit refinement loop
+}
+```
+
+#### `present_options` ⚡ INTERRUPT
+```python
+# Reads
+meal_options = state["meal_options"]
+cuisine = state["cuisine_type"]
+
+# Interrupt (waits for user input)
+user_selection = interrupt(value={...})
+
+# Writes
+return {"selected_meal": selected}
+```
+
+#### `create_meal_from_url`
+```python
+# Reads
+url = state["direct_url"]
+
+# Writes
+return {
+    "meal_options": [meal],
+    "selected_meal": meal  # Auto-selected
+}
+```
+
+#### `extract_ingredients`
+```python
+# Reads
+selected_meal = state["selected_meal"]
+
+# Writes (success)
+return {"grocery_list": ingredients}
+# OR (error)
+return {"grocery_list": [], "error": error_msg}
+```
+
+#### `review_ingredients` ⚡ INTERRUPT
+```python
+# Reads
+ingredients = state.get("grocery_list", [])
+
+# Interrupt (waits for user input)
+user_input = interrupt(value={...})
+
+# Writes
+return {"grocery_list": filtered_ingredients}
+```
+
+#### `add_to_reminders` ⚡ INTERRUPT
+```python
+# Reads
+ingredients = state.get("grocery_list", [])
+
+# Interrupt (waits for user input)
+list_input = interrupt(value={...})
+
+# Writes
+return {"reminders_added": True}  # or False
+```
+
+### State Progression Example (Search Flow)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Initial State                                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ cuisine_type: "italian"                                                     │
+│ direct_url: null                                                            │
+│ preferred_sources: ["bonappetit.com"]                                       │
+│ (all other fields: null/empty)                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ search_meals
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ + search_results: "snippet: Best Pasta Recipes... link: bonappetit.com..."  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ parse_meals
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ + meal_options: [MealOption(id=1, name="Cacio e Pepe", ...), ...]           │
+│ + messages: [AIMessage(...)]                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ validate_recipes
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ~ meal_options: [MealOption(...), ...] (filtered to valid only)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ present_options ⚡ INTERRUPT
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ + selected_meal: MealOption(id=2, name="Pasta Carbonara", recipe_url=...)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ extract_ingredients
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ + grocery_list: [Ingredient(name="spaghetti", amount="1", unit="lb"), ...]  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ review_ingredients ⚡ INTERRUPT
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ~ grocery_list: [...] (possibly filtered by user)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ add_to_reminders ⚡ INTERRUPT
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ + reminders_added: true                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Error Handling
 
 Errors set `state.error` and flow continues to completion, where the server checks:
