@@ -28,20 +28,39 @@ cd frontend && npm run dev  # Terminal 3: frontend
 src/
   meal_planner.py         # Main orchestrator, LangGraph workflow builder
   meal_planner_server.py  # FastAPI server with SSE streaming
-  nodes.py                # Graph node implementations (search, validate, extract)
   models.py               # Pydantic data models (Recipe, Ingredient, MealPlannerState)
+  prompts.py              # LLM prompt templates
   reminders_server.py     # HTTP proxy for AppleScript (runs on Mac host)
   reminders.py            # Reminders API abstraction
-  prompts.py              # LLM prompt templates
   collate.py              # Smart ingredient merging logic
+  ui.py                   # CLI output formatting
+
+  nodes/                  # Graph node implementations
+    __init__.py           # Re-exports all nodes
+    base.py               # Shared LLM, search tool, HTTP client
+    html_utils.py         # JSON-LD and text extraction
+    routing.py            # Conditional edge functions
+    search.py             # Search flow nodes
+    processing.py         # Processing and interrupt nodes
+    reminders_node.py     # Apple Reminders integration
+
+  server/                 # Server components
+    __init__.py           # Re-exports
+    sse.py                # SSE event factory and serialization
+    interrupts.py         # Interrupt type registry and handlers
+
 frontend/src/
   App.jsx                 # Main component, SSE event handling
   CuisineInput.jsx        # Input form for cuisine/URL
   MealSelection.jsx       # Recipe selection UI
   IngredientReview.jsx    # Ingredient modification UI
+
 docker/
   Dockerfile              # Python 3.11-slim container
   docker-compose.yml      # Service orchestration
+
+docs/
+  graph-architecture.md   # Mermaid diagrams of graph structure and state
 ```
 
 ## Key Commands

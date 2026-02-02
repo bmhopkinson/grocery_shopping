@@ -18,7 +18,7 @@ Event types sent via SSE:
 Usage: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000
 """
 
-import asyncio
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
@@ -27,9 +27,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+from langgraph.types import Command
 
 from meal_planner import build_meal_planner_graph, get_checkpointer_async
-from langgraph.types import Command
+from server.sse import (
+    sse_event,
+    serialize_model,
+    session_start_event,
+    status_event,
+    error_event,
+    complete_event,
+    grocery_list_event,
+)
+from server.interrupts import detect_interrupt
+
+
+logger = logging.getLogger(__name__)
 
 
 # Shared checkpointer (initialized on startup)
@@ -43,7 +56,13 @@ _checkpointer = None
 class Session:
     """Holds state for an active meal planning session."""
 
-    def __init__(self, session_id: str, cuisine_type: str = "", direct_url: str = "", preferred_sources: list[str] = None):
+    def __init__(
+        self,
+        session_id: str,
+        cuisine_type: str = "",
+        direct_url: str = "",
+        preferred_sources: list[str] = None
+    ):
         self.session_id = session_id
         self.cuisine_type = cuisine_type
         self.direct_url = direct_url
@@ -74,19 +93,9 @@ class ResumeRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Event Helpers
+# Node Status Messages
 # ---------------------------------------------------------------------------
 
-def sse_event(event_type: str, data: dict) -> dict:
-    """Format an SSE event."""
-    import json
-    return {
-        "event": event_type,
-        "data": json.dumps(data)
-    }
-
-
-# Node name to user-friendly status message
 NODE_MESSAGES = {
     "create_meal_from_url": "Fetching recipe from URL...",
     "search_meals": "Searching for recipes...",
@@ -99,6 +108,69 @@ NODE_MESSAGES = {
     "review_ingredients": "Preparing ingredient list for review...",
     "add_to_reminders": "Adding items to reminders...",
 }
+
+
+# ---------------------------------------------------------------------------
+# Stream Graph Execution
+# ---------------------------------------------------------------------------
+
+def _build_invoke_input(
+    initial_input: Optional[dict],
+    resume_input: Optional[str]
+):
+    """Build the input for graph invocation."""
+    if resume_input is not None:
+        return Command(resume=resume_input)
+    if initial_input is not None:
+        return initial_input
+    raise ValueError("Must provide either initial_input or resume_input")
+
+
+def _extract_status_event(event: dict) -> Optional[dict]:
+    """Extract status event from graph stream event if applicable."""
+    if event.get("event") == "on_chain_start":
+        node_name = event.get("name")
+        if node_name in NODE_MESSAGES:
+            return status_event(node_name, NODE_MESSAGES[node_name])
+    return None
+
+
+def _handle_interrupt(state) -> dict:
+    """Handle an interrupt state and return the appropriate SSE event."""
+    # Extract interrupt value
+    interrupt_value = None
+    if state.tasks and state.tasks[0].interrupts:
+        interrupt_value = state.tasks[0].interrupts[0].value
+
+    next_node = state.next[0] if state.next else None
+
+    # Use the interrupt registry to detect and build event
+    match = detect_interrupt(next_node, interrupt_value)
+    return sse_event(match.event_name, match.event_data)
+
+
+async def _handle_completion(session: Session, state) -> AsyncGenerator[dict, None]:
+    """Handle graph completion and yield final events."""
+    session.completed = True
+    values = state.values
+
+    # Check for errors in state
+    error = values.get("error")
+    if error:
+        yield error_event(error)
+        return
+
+    # Extract completion data
+    selected_meal = values.get("selected_meal")
+    grocery_list = values.get("grocery_list", [])
+    reminders_added = values.get("reminders_added", False)
+
+    # Emit grocery list if present
+    if grocery_list:
+        yield grocery_list_event(grocery_list)
+
+    # Emit completion
+    yield complete_event(selected_meal, grocery_list, reminders_added)
 
 
 async def stream_graph_execution(
@@ -114,117 +186,32 @@ async def stream_graph_execution(
     config = {"configurable": {"thread_id": session.thread_id}}
     graph = session.graph
 
-    print(f"[DEBUG] stream_graph_execution started for session {session.session_id}")
-    print(f"[DEBUG] thread_id: {session.thread_id}")
-    print(f"[DEBUG] initial_input: {initial_input is not None}, resume_input: {resume_input is not None}")
+    logger.debug(f"stream_graph_execution started for session {session.session_id}")
 
     try:
-        # Determine what to invoke with
-        if resume_input is not None:
-            invoke_input = Command(resume=resume_input)
-        elif initial_input is not None:
-            invoke_input = initial_input
-        else:
-            raise ValueError("Must provide either initial_input or resume_input")
+        # Determine invocation input
+        invoke_input = _build_invoke_input(initial_input, resume_input)
 
-        print(f"[DEBUG] Starting graph.astream_events...")
-        # Stream the graph execution
+        # Stream node execution events
         async for event in graph.astream_events(invoke_input, config=config, version="v2"):
-            event_type = event.get("event")
+            status = _extract_status_event(event)
+            if status:
+                yield status
 
-            # Node start events -> status updates
-            if event_type == "on_chain_start":
-                node_name = event.get("name")
-                if node_name in NODE_MESSAGES:
-                    yield sse_event("status", {
-                        "node": node_name,
-                        "message": NODE_MESSAGES[node_name]
-                    })
-
-            # Check for completion after stream ends
-
-        # After streaming, check the final state
+        # Check final state
         state = await graph.aget_state(config)
         session.last_state = state
 
-        # Check if we hit an interrupt
+        # Handle interrupt or completion
         if state.next:
-            # There's an interrupt - determine which type
-            interrupt_value = None
-            if state.tasks and state.tasks[0].interrupts:
-                interrupt_value = state.tasks[0].interrupts[0].value
-
-            next_node = state.next[0] if state.next else None
-
-            # Detect interrupt type based on the interrupt value's instruction field
-            # This is more reliable than node names when using subgraphs
-            instruction = interrupt_value.get("instruction", "") if interrupt_value else ""
-
-            if next_node == "present_options" or "select a recipe" in instruction.lower():
-                # Meal selection interrupt
-                # Get options from the interrupt value (passed by the node)
-                options_data = interrupt_value.get("options", []) if interrupt_value else []
-                yield sse_event("meal_options", {
-                    "options": options_data,
-                    "prompt": interrupt_value.get("prompt", "Select a meal:") if interrupt_value else "Select a meal:",
-                    "instruction": instruction
-                })
-            elif "remove" in instruction.lower() or "approve" in instruction.lower():
-                # Ingredient review interrupt (from instruction pattern)
-                # Get ingredients from the interrupt value (passed by the node), not state
-                ingredients_data = interrupt_value.get("ingredients", []) if interrupt_value else []
-                yield sse_event("ingredient_review", {
-                    "ingredients": ingredients_data,
-                    "prompt": interrupt_value.get("prompt", "Review ingredients:") if interrupt_value else "Review ingredients:",
-                    "instruction": instruction
-                })
-            elif "list number" in instruction.lower() or "skip" in instruction.lower():
-                # Reminders list selection interrupt (from instruction pattern)
-                # Get items from the interrupt value (passed by the node), not state
-                items_data = interrupt_value.get("items", []) if interrupt_value else []
-                yield sse_event("reminders_prompt", {
-                    "items": items_data,
-                    "existing_lists": interrupt_value.get("existing_lists", []) if interrupt_value else [],
-                    "prompt": interrupt_value.get("prompt", "Select a reminders list:") if interrupt_value else "Select a reminders list:",
-                    "instruction": instruction
-                })
-            else:
-                # Generic interrupt
-                yield sse_event("interrupt", {
-                    "next_node": next_node,
-                    "prompt": interrupt_value.get("prompt", "Input required:") if interrupt_value else "Input required:",
-                    "data": interrupt_value if interrupt_value else {}
-                })
+            yield _handle_interrupt(state)
         else:
-            # Graph completed
-            session.completed = True
-            values = state.values
-
-            # Check for errors in state
-            error = values.get("error")
-            if error:
-                yield sse_event("error", {"message": error})
-                return
-
-            selected_meal = values.get("selected_meal")
-            grocery_list = values.get("grocery_list", [])
-            reminders_added = values.get("reminders_added", False)
-
-            # Send grocery list event
-            if grocery_list:
-                yield sse_event("grocery_list", {
-                    "items": [item.model_dump() for item in grocery_list]
-                })
-
-            # Send completion event
-            yield sse_event("complete", {
-                "selected_meal": selected_meal.model_dump() if selected_meal else None,
-                "grocery_list": [item.model_dump() for item in grocery_list] if grocery_list else [],
-                "reminders_added": reminders_added
-            })
+            async for event in _handle_completion(session, state):
+                yield event
 
     except Exception as e:
-        yield sse_event("error", {"message": str(e)})
+        logger.exception(f"Error in stream_graph_execution: {e}")
+        yield error_event(str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -235,17 +222,15 @@ async def stream_graph_execution(
 async def lifespan(app: FastAPI):
     """Initialize checkpointer on startup, cleanup on shutdown."""
     global _checkpointer
-    print("[DEBUG] FastAPI lifespan startup - initializing checkpointer...")
+    logger.info("FastAPI lifespan startup - initializing checkpointer...")
     try:
         _checkpointer = await get_checkpointer_async()
-        print(f"[DEBUG] Checkpointer initialized: {type(_checkpointer).__name__}")
+        logger.info(f"Checkpointer initialized: {type(_checkpointer).__name__}")
     except Exception as e:
-        print(f"[ERROR] Failed to initialize checkpointer: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Failed to initialize checkpointer: {e}")
         raise
     yield
-    print("[DEBUG] FastAPI lifespan shutdown - clearing sessions...")
+    logger.info("FastAPI lifespan shutdown - clearing sessions...")
     sessions.clear()
 
 
@@ -277,12 +262,9 @@ async def start_plan(request: PlanRequest):
     Returns an SSE stream with events for the planning process.
     First event will be 'session_start' with the session_id needed for /resume.
     """
-    print(f"[DEBUG] /plan endpoint called")
-    print(f"[DEBUG] Request: cuisine_type={request.cuisine_type}, direct_url={request.direct_url}")
-    print(f"[DEBUG] _checkpointer type: {type(_checkpointer).__name__ if _checkpointer else 'None'}")
+    logger.debug(f"/plan endpoint called: cuisine_type={request.cuisine_type}, direct_url={request.direct_url}")
 
     session_id = str(uuid.uuid4())[:8]
-    print(f"[DEBUG] Creating session {session_id}...")
     session = Session(
         session_id,
         cuisine_type=request.cuisine_type,
@@ -290,7 +272,6 @@ async def start_plan(request: PlanRequest):
         preferred_sources=request.preferred_sources
     )
     sessions[session_id] = session
-    print(f"[DEBUG] Session {session_id} created, graph type: {type(session.graph).__name__}")
 
     initial_state = {
         "direct_url": request.direct_url if request.direct_url else None,
@@ -308,7 +289,7 @@ async def start_plan(request: PlanRequest):
 
     async def event_generator():
         # First event: session ID
-        yield sse_event("session_start", {"session_id": session_id})
+        yield session_start_event(session_id)
 
         # Stream graph execution
         async for event in stream_graph_execution(session, initial_input=initial_state):
@@ -362,8 +343,7 @@ async def get_session_state(session_id: str):
         "completed": session.completed,
         "next": list(state.next) if state.next else [],
         "values": {
-            k: (v.model_dump() if hasattr(v, 'model_dump') else
-                [i.model_dump() for i in v] if isinstance(v, list) and v and hasattr(v[0], 'model_dump') else v)
+            k: serialize_model(v)
             for k, v in state.values.items()
         }
     }

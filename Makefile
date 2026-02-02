@@ -18,7 +18,7 @@ help:
 	@echo "  4. python src/meal_planner.py"
 
 proxy:
-	cd src && python reminders_server.py
+	cd src && python3 reminders_server.py
 
 docker-build:
 	cd docker && docker compose build
@@ -33,7 +33,7 @@ docker-shell:
 	docker exec -it meal-planner bash
 
 run-local:
-	python src/meal_planner.py
+	python3 src/meal_planner.py
 
 start-all: docker-build
 	@echo "Starting proxy server in background..."

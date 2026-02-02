@@ -363,3 +363,46 @@ if error:
 
 Current error points:
 - `extract_ingredients`: Recipe fetch fails (403, timeout, etc.)
+
+## Code Organization
+
+### Node Modules (`src/nodes/`)
+
+| Module | Functions | Description |
+|--------|-----------|-------------|
+| `base.py` | `get_llm()`, `get_search_tool()`, `create_http_client()`, `invoke_structured()` | Shared infrastructure |
+| `html_utils.py` | `extract_json_ld_recipe()`, `extract_text_content()` | HTML parsing utilities |
+| `routing.py` | `should_refine()`, `route_by_input()` | Conditional edge functions |
+| `search.py` | `search_meals()`, `parse_meals()`, `validate_recipes()`, `refine_search()` | Search flow nodes |
+| `processing.py` | `create_meal_from_url()`, `present_options()`, `extract_ingredients()`, `review_ingredients()` | Processing & interrupt nodes |
+| `reminders_node.py` | `add_to_reminders()` | Apple Reminders integration |
+
+### Server Modules (`src/server/`)
+
+| Module | Components | Description |
+|--------|------------|-------------|
+| `sse.py` | `sse_event()`, `serialize_model()`, event factory functions | SSE event construction |
+| `interrupts.py` | `InterruptType`, `InterruptMatcher`, `detect_interrupt()` | Interrupt type registry |
+
+### Interrupt Registry Pattern
+
+The server uses a registry pattern for detecting interrupt types:
+
+```python
+# Each interrupt type has a Matcher class
+INTERRUPT_MATCHERS = [
+    MealSelectionMatcher(),      # Detects meal selection interrupt
+    IngredientReviewMatcher(),   # Detects ingredient review interrupt
+    RemindersPromptMatcher(),    # Detects reminders list interrupt
+    GenericInterruptMatcher(),   # Fallback for unknown types
+]
+
+# Usage in stream_graph_execution
+match = detect_interrupt(next_node, interrupt_value)
+yield sse_event(match.event_name, match.event_data)
+```
+
+To add a new interrupt type:
+1. Add value to `InterruptType` enum
+2. Create a new `Matcher` class with `matches()` and `build_event()` methods
+3. Add matcher to `INTERRUPT_MATCHERS` list (before `GenericInterruptMatcher`)
