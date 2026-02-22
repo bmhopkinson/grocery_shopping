@@ -212,10 +212,28 @@ def review_ingredients(state: MealPlannerState) -> dict:
 
     ui.show_user_input(user_input)
 
-    # Parse user input
+    # Handle structured input (from frontend)
+    if isinstance(user_input, dict):
+        action = user_input.get("action")
+        if action == "confirm":
+            selected_indices = set(user_input.get("selected_indices", []))
+            logger.debug(f"Structured input: selected_indices={selected_indices}")
+            if not selected_indices:
+                ui.show_removed_count(len(ingredients))
+                return {"grocery_list": []}
+            filtered = [
+                item for i, item in enumerate(ingredients)
+                if i in selected_indices
+            ]
+            ui.show_removed_count(len(ingredients) - len(filtered))
+            return {"grocery_list": filtered}
+        # Unknown action, keep all
+        return {"grocery_list": ingredients}
+
+    # Fallback: parse string input (CLI mode)
     user_input_str = str(user_input).strip().lower()
 
-    # Accept "yes" as well as "ok" (frontend sends "yes")
+    # Accept "yes" as well as "ok"
     if user_input_str in ("ok", "yes", ""):
         return {"grocery_list": ingredients}
 

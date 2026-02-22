@@ -21,7 +21,7 @@ Usage: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,7 +89,7 @@ class PlanRequest(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    input: str
+    input: Union[str, dict]  # Support both string (CLI) and structured (frontend) input
 
 
 # ---------------------------------------------------------------------------

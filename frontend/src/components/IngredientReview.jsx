@@ -39,16 +39,14 @@ export default function IngredientReview({ data, onSubmit, loading }) {
 
   const handleSubmit = () => {
     if (modifications.trim()) {
+      // Free-form text modifications use string format (for CLI compatibility)
       onSubmit(modifications.trim())
-    } else if (checked.length === ingredients.length) {
-      onSubmit('yes')
-    } else if (checked.length === 0) {
-      onSubmit('remove all')
     } else {
-      const removed = ingredients
-        .filter((_, idx) => !checked.includes(idx))
-        .map((ing) => ing.name)
-      onSubmit(`remove: ${removed.join(', ')}`)
+      // Structured format: send selected indices directly
+      onSubmit({
+        action: 'confirm',
+        selected_indices: checked  // Already 0-indexed array
+      })
     }
   }
 
