@@ -8,8 +8,8 @@ help:
 	@echo "  make docker-down  - Stop the Docker container"
 	@echo "  make docker-shell - Exec into the running container"
 	@echo "  make run-local    - Run the meal planner locally (no Docker)"
-	@echo "  make start-all    - Start proxy, Docker container, and frontend"
-	@echo "  make stop-all     - Stop proxy, Docker container, and frontend"
+	@echo "  make start-all    - Start proxy and all Docker containers (backend + frontend)"
+	@echo "  make stop-all     - Stop proxy and all Docker containers"
 	@echo ""
 	@echo "Typical Docker workflow:"
 	@echo "  1. make proxy        (in one terminal)"
@@ -39,19 +39,14 @@ start-all: docker-build
 	@echo "Starting proxy server in background..."
 	cd src && nohup python3 reminders_server.py > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
 	@sleep 1
-	@echo "Starting Docker container..."
+	@echo "Starting Docker containers..."
 	cd docker && docker compose up -d
-	@echo "Starting frontend in background..."
-	cd frontend && nohup npm run dev > ../frontend.log 2>&1 & echo $$! > ../.frontend.pid
-	@echo "All services started. Logs: proxy.log, frontend.log. Use 'make stop-all' to stop."
+	@echo "All services started. Log: proxy.log. Use 'make stop-all' to stop."
 
 stop-all:
-	@echo "Stopping Docker container..."
+	@echo "Stopping Docker containers..."
 	-cd docker && docker compose down
 	@echo "Stopping proxy server..."
 	-@if [ -f .proxy.pid ]; then kill $$(cat .proxy.pid) 2>/dev/null; rm .proxy.pid; fi
 	-@pkill -f "python3 reminders_server.py" 2>/dev/null || true
-	@echo "Stopping frontend..."
-	-@if [ -f .frontend.pid ]; then kill $$(cat .frontend.pid) 2>/dev/null; rm .frontend.pid; fi
-	-@pkill -f "vite" 2>/dev/null || true
 	@echo "All services stopped."

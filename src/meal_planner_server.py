@@ -19,8 +19,10 @@ Usage: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000
 """
 
 import logging
+import logging.handlers
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator, Optional, Union
 
 from fastapi import FastAPI, HTTPException
@@ -42,7 +44,26 @@ from server.sse import (
 from server.interrupts import detect_interrupt
 
 
+# ---------------------------------------------------------------------------
+# File Logging Setup
+# ---------------------------------------------------------------------------
+
+LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+_file_handler = logging.handlers.RotatingFileHandler(
+    LOG_DIR / "meal_planner_server.log",
+    maxBytes=5 * 1024 * 1024,  # 5 MB
+    backupCount=3,
+)
+_file_handler.setLevel(logging.DEBUG)
+_file_handler.setFormatter(
+    logging.Formatter("%(asctime)s | %(levelname)-8s | %(message)s")
+)
+logger.addHandler(_file_handler)
 
 
 # Shared checkpointer (initialized on startup)
@@ -186,7 +207,7 @@ async def stream_graph_execution(
     config = {"configurable": {"thread_id": session.thread_id}}
     graph = session.graph
 
-    logger.debug(f"stream_graph_execution started for session {session.session_id}")
+    logger.info(f"stream_graph_execution started for session {session.session_id}")
 
     try:
         # Determine invocation input
@@ -204,13 +225,15 @@ async def stream_graph_execution(
 
         # Handle interrupt or completion
         if state.next:
+            logger.info(f"Session {session.session_id} - interrupt at node(s): {list(state.next)}")
             yield _handle_interrupt(state)
         else:
+            logger.info(f"Session {session.session_id} - graph completed")
             async for event in _handle_completion(session, state):
                 yield event
 
     except Exception as e:
-        logger.exception(f"Error in stream_graph_execution: {e}")
+        logger.exception(f"Session {session.session_id} - error in stream_graph_execution: {e}")
         yield error_event(str(e))
 
 
@@ -262,9 +285,10 @@ async def start_plan(request: PlanRequest):
     Returns an SSE stream with events for the planning process.
     First event will be 'session_start' with the session_id needed for /resume.
     """
-    logger.debug(f"/plan endpoint called: cuisine_type={request.cuisine_type}, direct_url={request.direct_url}")
+    logger.info(f"POST /plan - cuisine_type={request.cuisine_type!r}, direct_url={request.direct_url!r}, preferred_sources={request.preferred_sources}")
 
     session_id = str(uuid.uuid4())[:8]
+    logger.info(f"POST /plan - created session {session_id}")
     session = Session(
         session_id,
         cuisine_type=request.cuisine_type,
@@ -305,12 +329,16 @@ async def resume_session(session_id: str, request: ResumeRequest):
 
     Returns an SSE stream continuing from where the interrupt occurred.
     """
+    logger.info(f"POST /sessions/{session_id}/resume - input={request.input!r}")
+
     session = sessions.get(session_id)
 
     if not session:
+        logger.warning(f"POST /sessions/{session_id}/resume - session not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     if session.completed:
+        logger.warning(f"POST /sessions/{session_id}/resume - session already completed")
         raise HTTPException(status_code=400, detail="Session already completed")
 
     async def event_generator():
@@ -323,9 +351,12 @@ async def resume_session(session_id: str, request: ResumeRequest):
 @app.get("/sessions/{session_id}")
 async def get_session_state(session_id: str):
     """Get the current state of a session (for debugging/recovery)."""
+    logger.info(f"GET /sessions/{session_id}")
+
     session = sessions.get(session_id)
 
     if not session:
+        logger.warning(f"GET /sessions/{session_id} - session not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     state = session.last_state
@@ -352,13 +383,17 @@ async def get_session_state(session_id: str):
 @app.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a session."""
+    logger.info(f"DELETE /sessions/{session_id}")
     if session_id in sessions:
         del sessions[session_id]
+        logger.info(f"DELETE /sessions/{session_id} - deleted")
         return {"deleted": True}
+    logger.warning(f"DELETE /sessions/{session_id} - session not found")
     raise HTTPException(status_code=404, detail="Session not found")
 
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    logger.debug(f"GET /health - active_sessions={len(sessions)}")
     return {"status": "ok", "active_sessions": len(sessions)}
