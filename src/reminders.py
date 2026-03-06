@@ -2,12 +2,11 @@
 Apple Reminders integration.
 
 Supports two modes:
-- Direct AppleScript (when running on macOS)
+- Direct EventKit via PyObjC (when running on macOS)
 - HTTP proxy (when running in Docker, set REMINDERS_PROXY_URL env var)
 """
 
 import os
-import subprocess
 
 import httpx
 
@@ -18,6 +17,12 @@ PROXY_URL = os.getenv("REMINDERS_PROXY_URL")
 def _use_proxy() -> bool:
     """Check if we should use the HTTP proxy."""
     return PROXY_URL is not None
+
+
+def _get_store():
+    """Lazily import and return the module-level EventKit store singleton."""
+    from eventkit_store import _store
+    return _store
 
 
 def create_reminder(list_name: str, reminder_text: str) -> bool:
@@ -43,27 +48,8 @@ def create_reminder(list_name: str, reminder_text: str) -> bool:
             print(f"Error creating reminder via proxy: {e}")
             return False
 
-    escaped_text = reminder_text.replace('"', '\\"').replace('\\', '\\\\')
-
-    applescript = f'''
-    tell application "Reminders"
-        tell list "{list_name}"
-            make new reminder with properties {{name:"{escaped_text}"}}
-        end tell
-    end tell
-    '''
-
-    try:
-        subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error creating reminder: {e.stderr}")
-        return False
+    ok, _ = _get_store().create_reminder(list_name, reminder_text)
+    return ok
 
 
 def list_exists(list_name: str) -> bool:
@@ -88,23 +74,8 @@ def list_exists(list_name: str) -> bool:
         except Exception:
             return False
 
-    applescript = f'''
-    tell application "Reminders"
-        set listNames to name of every list
-        return listNames contains "{list_name}"
-    end tell
-    '''
-
-    try:
-        result = subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return result.stdout.strip() == "true"
-    except subprocess.CalledProcessError:
-        return False
+    ok, result = _get_store().list_exists(list_name)
+    return result if ok else False
 
 
 def create_list(list_name: str) -> bool:
@@ -129,23 +100,8 @@ def create_list(list_name: str) -> bool:
             print(f"Error creating list via proxy: {e}")
             return False
 
-    applescript = f'''
-    tell application "Reminders"
-        make new list with properties {{name:"{list_name}"}}
-    end tell
-    '''
-
-    try:
-        subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error creating list: {e.stderr}")
-        return False
+    ok, _ = _get_store().create_list(list_name)
+    return ok
 
 
 def get_all_lists() -> list[str]:
@@ -164,26 +120,8 @@ def get_all_lists() -> list[str]:
         except Exception:
             return []
 
-    applescript = '''
-    tell application "Reminders"
-        set listNames to name of every list
-        return listNames
-    end tell
-    '''
-
-    try:
-        result = subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        lists_str = result.stdout.strip()
-        if not lists_str:
-            return []
-        return [name.strip() for name in lists_str.split(',')]
-    except subprocess.CalledProcessError:
-        return []
+    ok, result = _get_store().get_all_lists()
+    return result if ok else []
 
 
 def get_reminders(list_name: str) -> list[str]:
@@ -208,29 +146,8 @@ def get_reminders(list_name: str) -> list[str]:
         except Exception:
             return []
 
-    escaped_list = list_name.replace('"', '\\"')
-    applescript = f'''
-    tell application "Reminders"
-        tell list "{escaped_list}"
-            set reminderNames to name of every reminder whose completed is false
-            return reminderNames
-        end tell
-    end tell
-    '''
-
-    try:
-        result = subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        reminders_str = result.stdout.strip()
-        if not reminders_str:
-            return []
-        return [name.strip() for name in reminders_str.split(',')]
-    except subprocess.CalledProcessError:
-        return []
+    ok, result = _get_store().get_list_items(list_name)
+    return result if ok else []
 
 
 def delete_reminder(list_name: str, reminder_text: str) -> bool:
@@ -257,39 +174,13 @@ def delete_reminder(list_name: str, reminder_text: str) -> bool:
             print(f"Error deleting reminder via proxy: {e}")
             return False
 
-    escaped_text = reminder_text.replace('"', '\\"').replace('\\', '\\\\')
-    escaped_list = list_name.replace('"', '\\"')
-
-    applescript = f'''
-    tell application "Reminders"
-        tell list "{escaped_list}"
-            set targetReminders to every reminder whose name is "{escaped_text}"
-            repeat with r in targetReminders
-                delete r
-            end repeat
-        end tell
-    end tell
-    '''
-
-    try:
-        subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error deleting reminder: {e.stderr}")
-        return False
+    ok, _ = _get_store().delete_reminder(list_name, reminder_text)
+    return ok
 
 
 def delete_reminders_batch(list_name: str, reminder_texts: list[str]) -> bool:
     """
-    Delete multiple reminders in a single AppleScript call.
-
-    This batches deletions to avoid overwhelming the TCC daemon with
-    repeated permission checks, which can cause Reminders to hang.
+    Delete multiple reminders in a single batched EventKit commit.
 
     Args:
         list_name: Name of the Reminders list
@@ -314,38 +205,5 @@ def delete_reminders_batch(list_name: str, reminder_texts: list[str]) -> bool:
             print(f"Error batch deleting reminders via proxy: {e}")
             return False
 
-    escaped_list = list_name.replace('"', '\\"')
-
-    # Build AppleScript list of names to delete
-    escaped_names = [text.replace('\\', '\\\\').replace('"', '\\"') for text in reminder_texts]
-    names_list = ', '.join(f'"{name}"' for name in escaped_names)
-
-    applescript = f'''
-    tell application "Reminders"
-        tell list "{escaped_list}"
-            set namesToDelete to {{{names_list}}}
-            repeat with nameToDelete in namesToDelete
-                set targetReminders to every reminder whose name is nameToDelete
-                repeat with r in targetReminders
-                    delete r
-                end repeat
-            end repeat
-        end tell
-    end tell
-    '''
-
-    try:
-        subprocess.run(
-            ['osascript', '-e', applescript],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error batch deleting reminders: {e.stderr}")
-        return False
-    except subprocess.TimeoutExpired:
-        print("Error: Batch delete timed out")
-        return False
+    ok, _ = _get_store().delete_reminders_batch(list_name, reminder_texts)
+    return ok
