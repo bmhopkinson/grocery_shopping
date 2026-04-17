@@ -21,13 +21,13 @@ proxy:
 	cd src && python3 reminders_server.py
 
 docker-build:
-	cd docker && docker compose build
+	cd docker && docker compose --env-file ../.env build
 
 docker-up: docker-build
-	cd docker && docker compose up -d
+	cd docker && docker compose --env-file ../.env up -d
 
 docker-down:
-	cd docker && docker compose down
+	cd docker && docker compose --env-file ../.env down
 
 docker-shell:
 	docker exec -it meal-planner bash
@@ -40,12 +40,12 @@ start-all: docker-build
 	cd src && nohup python3 reminders_server.py > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
 	@sleep 1
 	@echo "Starting Docker containers..."
-	cd docker && docker compose up -d
+	cd docker && docker compose --env-file ../.env up -d
 	@echo "All services started. Log: proxy.log. Use 'make stop-all' to stop."
 
 stop-all:
 	@echo "Stopping Docker containers..."
-	-cd docker && docker compose down
+	-cd docker && docker compose --env-file ../.env down
 	@echo "Stopping proxy server..."
 	-@if [ -f .proxy.pid ]; then kill $$(cat .proxy.pid) 2>/dev/null; rm .proxy.pid; fi
 	-@pkill -f "python3 reminders_server.py" 2>/dev/null || true
