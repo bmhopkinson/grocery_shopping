@@ -15,10 +15,6 @@ import {
   Checkbox,
   Chip,
   Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
   Paper,
   CircularProgress,
@@ -33,34 +29,20 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Cancel'
+import AddToRemindersDialog from './AddToRemindersDialog'
 
-const CATEGORIES = ['Breakfast', 'Lunch', ,'Snacks', 'Other']
+const CATEGORIES = ['Breakfast', 'Lunch', 'Snacks', 'Other']
 
 export default function UsualsList() {
   const [usuals, setUsuals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
-
-  // Add form
-  const [newName, setNewName] = useState('')
-  const [newCategory, setNewCategory] = useState('')
-  const [adding, setAdding] = useState(false)
-
-  // Edit state
-  const [editingId, setEditingId] = useState(null)
-  const [editName, setEditName] = useState('')
-  const [editCategory, setEditCategory] = useState('')
-
-  // Selection
   const [selected, setSelected] = useState(new Set())
 
-  // Reminders dialog
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [reminderLists, setReminderLists] = useState([])
-  const [selectedList, setSelectedList] = useState('')
-  const [newListName, setNewListName] = useState('')
-  const [addingToReminders, setAddingToReminders] = useState(false)
+  const [addForm, setAddForm] = useState({ name: '', category: '', submitting: false })
+  const [edit, setEdit] = useState({ id: null, name: '', category: '' })
+  const [dialog, setDialog] = useState({ open: false, lists: [], submitting: false })
 
   const fetchUsuals = useCallback(async () => {
     try {
@@ -77,43 +59,35 @@ export default function UsualsList() {
   useEffect(() => { fetchUsuals() }, [fetchUsuals])
 
   const handleAdd = async () => {
-    if (!newName.trim()) return
-    setAdding(true)
+    if (!addForm.name.trim()) return
+    setAddForm(f => ({ ...f, submitting: true }))
     try {
       const res = await fetch('/api/usuals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), category: newCategory || null }),
+        body: JSON.stringify({ name: addForm.name.trim(), category: addForm.category || null }),
       })
       if (!res.ok) throw new Error('Failed to add item')
       const item = await res.json()
       setUsuals(prev => [...prev, item])
-      setNewName('')
-      setNewCategory('')
+      setAddForm({ name: '', category: '', submitting: false })
     } catch (e) {
       setError(e.message)
-    } finally {
-      setAdding(false)
+      setAddForm(f => ({ ...f, submitting: false }))
     }
-  }
-
-  const handleEdit = (item) => {
-    setEditingId(item.id)
-    setEditName(item.name)
-    setEditCategory(item.category || '')
   }
 
   const handleSaveEdit = async () => {
     try {
-      const res = await fetch(`/api/usuals/${editingId}`, {
+      const res = await fetch(`/api/usuals/${edit.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName.trim(), category: editCategory || null }),
+        body: JSON.stringify({ name: edit.name.trim(), category: edit.category || null }),
       })
       if (!res.ok) throw new Error('Failed to update item')
       const updated = await res.json()
-      setUsuals(prev => prev.map(u => u.id === editingId ? updated : u))
-      setEditingId(null)
+      setUsuals(prev => prev.map(u => u.id === edit.id ? updated : u))
+      setEdit({ id: null, name: '', category: '' })
     } catch (e) {
       setError(e.message)
     }
@@ -139,24 +113,16 @@ export default function UsualsList() {
   }
 
   const openRemindersDialog = async () => {
+    let lists = []
     try {
       const res = await fetch('/api/reminder-lists')
-      if (res.ok) {
-        const data = await res.json()
-        setReminderLists(data.lists || [])
-      }
-    } catch {
-      setReminderLists([])
-    }
-    setSelectedList('')
-    setNewListName('')
-    setDialogOpen(true)
+      if (res.ok) lists = (await res.json()).lists || []
+    } catch { /* use empty list */ }
+    setDialog({ open: true, lists, submitting: false })
   }
 
-  const handleAddToReminders = async () => {
-    const listName = newListName.trim() || selectedList
-    if (!listName) return
-    setAddingToReminders(true)
+  const handleAddToReminders = async (listName) => {
+    setDialog(d => ({ ...d, submitting: true }))
     try {
       const res = await fetch('/api/usuals/add-to-reminders', {
         method: 'POST',
@@ -165,17 +131,15 @@ export default function UsualsList() {
       })
       if (!res.ok) throw new Error('Failed to add to Reminders')
       const data = await res.json()
-      setDialogOpen(false)
+      setDialog(d => ({ ...d, open: false, submitting: false }))
       setSelected(new Set())
       setSuccess(`Added ${data.added.length} item${data.added.length !== 1 ? 's' : ''} to "${data.list_name}"`)
     } catch (e) {
       setError(e.message)
-    } finally {
-      setAddingToReminders(false)
+      setDialog(d => ({ ...d, submitting: false }))
     }
   }
 
-  // Group usuals by category
   const grouped = usuals.reduce((acc, item) => {
     const cat = item.category || 'Uncategorized'
     if (!acc[cat]) acc[cat] = []
@@ -196,34 +160,29 @@ export default function UsualsList() {
       <Typography variant="h5" gutterBottom>Restock Usuals</Typography>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>
       )}
       {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>{success}</Alert>
       )}
 
-      {/* Add new item */}
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         <Typography variant="subtitle2" gutterBottom>Add Item</Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <TextField
             size="small"
             label="Item name"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
+            value={addForm.name}
+            onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
             sx={{ flex: 2, minWidth: 150 }}
           />
           <FormControl size="small" sx={{ flex: 1, minWidth: 130 }}>
             <InputLabel>Category</InputLabel>
             <Select
-              value={newCategory}
+              value={addForm.category}
               label="Category"
-              onChange={e => setNewCategory(e.target.value)}
+              onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}
             >
               <MenuItem value="">None</MenuItem>
               {CATEGORIES.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
@@ -233,7 +192,7 @@ export default function UsualsList() {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleAdd}
-            disabled={!newName.trim() || adding}
+            disabled={!addForm.name.trim() || addForm.submitting}
             sx={{ height: 40 }}
           >
             Add
@@ -241,18 +200,13 @@ export default function UsualsList() {
         </Box>
       </Paper>
 
-      {/* Selection bar */}
       {usuals.length > 0 && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
             {selected.size} of {usuals.length} selected
           </Typography>
-          <Button size="small" onClick={() => setSelected(new Set(usuals.map(u => u.id)))}>
-            All
-          </Button>
-          <Button size="small" onClick={() => setSelected(new Set())}>
-            None
-          </Button>
+          <Button size="small" onClick={() => setSelected(new Set(usuals.map(u => u.id)))}>All</Button>
+          <Button size="small" onClick={() => setSelected(new Set())}>None</Button>
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
@@ -266,7 +220,6 @@ export default function UsualsList() {
         </Box>
       )}
 
-      {/* Items grouped by category */}
       {usuals.length === 0 ? (
         <Typography color="text.secondary" align="center" sx={{ py: 6 }}>
           No items yet. Add your regular grocery items above.
@@ -275,9 +228,7 @@ export default function UsualsList() {
         Object.entries(grouped).map(([category, items]) => (
           <Accordion key={category} defaultExpanded disableGutters elevation={1} sx={{ mb: 1 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle1" fontWeight="medium">
-                {category}
-              </Typography>
+              <Typography variant="subtitle1" fontWeight="medium">{category}</Typography>
               <Chip label={items.length} size="small" sx={{ ml: 1 }} />
             </AccordionSummary>
             <AccordionDetails sx={{ p: 0 }}>
@@ -287,9 +238,9 @@ export default function UsualsList() {
                     {idx > 0 && <Divider />}
                     <ListItem
                       secondaryAction={
-                        editingId !== item.id ? (
+                        edit.id !== item.id ? (
                           <Box>
-                            <IconButton size="small" onClick={() => handleEdit(item)}>
+                            <IconButton size="small" onClick={() => setEdit({ id: item.id, name: item.name, category: item.category || '' })}>
                               <EditIcon fontSize="small" />
                             </IconButton>
                             <IconButton size="small" onClick={() => handleDelete(item.id)}>
@@ -305,21 +256,21 @@ export default function UsualsList() {
                         size="small"
                         sx={{ mr: 1 }}
                       />
-                      {editingId === item.id ? (
+                      {edit.id === item.id ? (
                         <Box sx={{ display: 'flex', gap: 1, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                           <TextField
                             size="small"
-                            value={editName}
-                            onChange={e => setEditName(e.target.value)}
+                            value={edit.name}
+                            onChange={e => setEdit(s => ({ ...s, name: e.target.value }))}
                             onKeyDown={e => e.key === 'Enter' && handleSaveEdit()}
                             sx={{ flex: 2 }}
                           />
                           <FormControl size="small" sx={{ flex: 1, minWidth: 110 }}>
                             <InputLabel>Category</InputLabel>
                             <Select
-                              value={editCategory}
+                              value={edit.category}
                               label="Category"
-                              onChange={e => setEditCategory(e.target.value)}
+                              onChange={e => setEdit(s => ({ ...s, category: e.target.value }))}
                             >
                               <MenuItem value="">None</MenuItem>
                               {CATEGORIES.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
@@ -328,7 +279,7 @@ export default function UsualsList() {
                           <IconButton size="small" color="primary" onClick={handleSaveEdit}>
                             <SaveIcon fontSize="small" />
                           </IconButton>
-                          <IconButton size="small" onClick={() => setEditingId(null)}>
+                          <IconButton size="small" onClick={() => setEdit({ id: null, name: '', category: '' })}>
                             <CancelIcon fontSize="small" />
                           </IconButton>
                         </Box>
@@ -344,43 +295,14 @@ export default function UsualsList() {
         ))
       )}
 
-      {/* Add to Reminders dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add to Reminders</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Adding {selected.size} item{selected.size !== 1 ? 's' : ''} to a Reminders list.
-          </Typography>
-          {reminderLists.length > 0 && (
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Select existing list</InputLabel>
-              <Select
-                value={selectedList}
-                label="Select existing list"
-                onChange={e => { setSelectedList(e.target.value); setNewListName('') }}
-              >
-                {reminderLists.map(l => <MenuItem key={l} value={l}>{l}</MenuItem>)}
-              </Select>
-            </FormControl>
-          )}
-          <TextField
-            fullWidth
-            label={reminderLists.length > 0 ? 'Or create new list' : 'List name'}
-            value={newListName}
-            onChange={e => { setNewListName(e.target.value); setSelectedList('') }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleAddToReminders}
-            disabled={(!selectedList && !newListName.trim()) || addingToReminders}
-          >
-            {addingToReminders ? 'Adding…' : 'Add to Reminders'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <AddToRemindersDialog
+        open={dialog.open}
+        onClose={() => setDialog(d => ({ ...d, open: false }))}
+        itemCount={selected.size}
+        reminderLists={dialog.lists}
+        onConfirm={handleAddToReminders}
+        submitting={dialog.submitting}
+      />
     </Box>
   )
 }

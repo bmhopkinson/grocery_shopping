@@ -6,18 +6,14 @@ import {
   Typography,
   Chip,
   Stack,
-  Collapse,
-  IconButton,
   Tabs,
   Tab,
 } from '@mui/material'
 import RestaurantIcon from '@mui/icons-material/Restaurant'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import AddIcon from '@mui/icons-material/Add'
 import SearchIcon from '@mui/icons-material/Search'
 import LinkIcon from '@mui/icons-material/Link'
 import { DEFAULT_RECIPE_SOURCES } from '../config'
+import SourceManager from './SourceManager'
 
 const SUGGESTIONS = ['Italian', 'Mexican', 'Japanese', 'Indian', 'Thai', 'Mediterranean']
 
@@ -26,8 +22,6 @@ export default function CuisineInput({ onSubmit, loading }) {
   const [cuisine, setCuisine] = useState('')
   const [recipeUrl, setRecipeUrl] = useState('')
   const [sources, setSources] = useState([...DEFAULT_RECIPE_SOURCES])
-  const [newSource, setNewSource] = useState('')
-  const [showSources, setShowSources] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -38,33 +32,9 @@ export default function CuisineInput({ onSubmit, loading }) {
     }
   }
 
-  const handleSuggestionClick = (suggestion) => {
-    setCuisine(suggestion)
-    onSubmit({ cuisine: suggestion, sources })
-  }
-
   const isSubmitDisabled = loading ||
     (inputMode === 'search' && !cuisine.trim()) ||
     (inputMode === 'url' && !recipeUrl.trim())
-
-  const handleRemoveSource = (sourceToRemove) => {
-    setSources(sources.filter((s) => s !== sourceToRemove))
-  }
-
-  const handleAddSource = () => {
-    const trimmed = newSource.trim().toLowerCase()
-    if (trimmed && !sources.includes(trimmed)) {
-      setSources([...sources, trimmed])
-      setNewSource('')
-    }
-  }
-
-  const handleSourceKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleAddSource()
-    }
-  }
 
   return (
     <Box>
@@ -77,7 +47,7 @@ export default function CuisineInput({ onSubmit, loading }) {
 
       <Tabs
         value={inputMode}
-        onChange={(e, v) => setInputMode(v)}
+        onChange={(_, v) => setInputMode(v)}
         centered
         sx={{ mb: 3 }}
       >
@@ -142,7 +112,7 @@ export default function CuisineInput({ onSubmit, loading }) {
                 <Chip
                   key={suggestion}
                   label={suggestion}
-                  onClick={() => handleSuggestionClick(suggestion)}
+                  onClick={() => { setCuisine(suggestion); onSubmit({ cuisine: suggestion, sources }) }}
                   disabled={loading}
                   clickable
                 />
@@ -150,61 +120,7 @@ export default function CuisineInput({ onSubmit, loading }) {
             </Stack>
           </Box>
 
-          <Box sx={{ mt: 3 }}>
-            <Button
-              size="small"
-              onClick={() => setShowSources(!showSources)}
-              endIcon={showSources ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              sx={{ mb: 1 }}
-            >
-              Preferred Recipe Sources ({sources.length})
-            </Button>
-
-            <Collapse in={showSources}>
-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  Recipes will be searched from these sites:
-                </Typography>
-
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-                  {sources.map((source) => (
-                    <Chip
-                      key={source}
-                      label={source}
-                      onDelete={() => handleRemoveSource(source)}
-                      size="small"
-                      disabled={loading}
-                    />
-                  ))}
-                  {sources.length === 0 && (
-                    <Typography variant="body2" color="text.secondary" fontStyle="italic">
-                      No sources selected (will search all sites)
-                    </Typography>
-                  )}
-                </Stack>
-
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <TextField
-                    size="small"
-                    placeholder="Add a website (e.g., budgetbytes.com)"
-                    value={newSource}
-                    onChange={(e) => setNewSource(e.target.value)}
-                    onKeyDown={handleSourceKeyDown}
-                    disabled={loading}
-                    sx={{ flex: 1 }}
-                  />
-                  <IconButton
-                    onClick={handleAddSource}
-                    disabled={!newSource.trim() || loading}
-                    color="primary"
-                    size="small"
-                  >
-                    <AddIcon />
-                  </IconButton>
-                </Box>
-              </Box>
-            </Collapse>
-          </Box>
+          <SourceManager sources={sources} onChange={setSources} disabled={loading} />
         </>
       )}
     </Box>

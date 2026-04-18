@@ -30,6 +30,16 @@ from psycopg_pool import AsyncConnectionPool
 
 from models import MealPlannerState
 
+# Register custom Pydantic types so the Postgres msgpack checkpointer can
+# deserialize them without warnings.  The attribute name changed across
+# LangGraph patch releases, so we try a couple of known locations.
+try:
+    from langgraph.checkpoint.serde.msgpack import allowed_msgpack_modules as _amm
+    for _entry in [('models', 'MealOption'), ('models', 'Ingredient')]:
+        _amm.add(_entry)
+except Exception:
+    pass
+
 
 # Module-level connection pool (singleton)
 _connection_pool: AsyncConnectionPool | None = None
@@ -113,28 +123,6 @@ from nodes import (
 )
 
 
-def build_meal_processing_subgraph() -> StateGraph:
-    """Build the subgraph for processing a single selected meal.
-
-    This subgraph handles:
-    - Fetching recipe and extracting ingredients
-    - User review of ingredients
-    - Adding to Apple Reminders
-    """
-    builder = StateGraph(MealPlannerState)
-
-    builder.add_node("extract_ingredients", extract_ingredients)
-    builder.add_node("review_ingredients", review_ingredients)
-    builder.add_node("add_to_reminders", add_to_reminders)
-
-    builder.add_edge(START, "extract_ingredients")
-    builder.add_edge("extract_ingredients", "review_ingredients")
-    builder.add_edge("review_ingredients", "add_to_reminders")
-    builder.add_edge("add_to_reminders", END)
-
-    return builder.compile()
-
-
 def build_meal_planner_graph(checkpointer=None) -> StateGraph:
     """Build the meal planner graph with multiple entry points.
 
@@ -154,8 +142,11 @@ def build_meal_planner_graph(checkpointer=None) -> StateGraph:
     # Direct URL node
     builder.add_node("create_meal_from_url", create_meal_from_url)
 
-    # Add subgraph as a node for processing the selected meal
-    builder.add_node("process_meal", build_meal_processing_subgraph())
+    # Meal processing nodes (flattened — subgraphs require checkpointer=True for
+    # interrupts to work with an external Postgres checkpointer; flat is simpler)
+    builder.add_node("extract_ingredients", extract_ingredients)
+    builder.add_node("review_ingredients", review_ingredients)
+    builder.add_node("add_to_reminders", add_to_reminders)
 
     # Entry routing: direct URL vs search
     builder.add_conditional_edges(START, route_by_input)
@@ -165,13 +156,15 @@ def build_meal_planner_graph(checkpointer=None) -> StateGraph:
     builder.add_edge("parse_meals", "validate_recipes")
     builder.add_conditional_edges("validate_recipes", should_refine)
     builder.add_edge("refine_search", "validate_recipes")
-    builder.add_edge("present_options", "process_meal")
+    builder.add_edge("present_options", "extract_ingredients")
 
     # Direct URL flow
-    builder.add_edge("create_meal_from_url", "process_meal")
+    builder.add_edge("create_meal_from_url", "extract_ingredients")
 
-    # Subgraph to END
-    builder.add_edge("process_meal", END)
+    # Meal processing flow
+    builder.add_edge("extract_ingredients", "review_ingredients")
+    builder.add_edge("review_ingredients", "add_to_reminders")
+    builder.add_edge("add_to_reminders", END)
 
     if checkpointer is None:
         checkpointer = get_checkpointer()

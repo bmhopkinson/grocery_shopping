@@ -176,7 +176,6 @@ NODE_MESSAGES = {
     "validate_recipes": "Validating recipe URLs...",
     "refine_search": "Refining search with specific dishes...",
     "present_options": "Preparing meal options...",
-    "process_meal": "Processing selected meal...",
     "extract_ingredients": "Extracting ingredients from recipe...",
     "review_ingredients": "Preparing ingredient list for review...",
     "add_to_reminders": "Adding items to reminders...",
