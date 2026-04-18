@@ -1,6 +1,7 @@
 import { Box, Typography, Card, CardActionArea, CardContent, Grid } from '@mui/material'
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import SortIcon from '@mui/icons-material/Sort'
 
 export default function HomeScreen({ onSelect }) {
   return (
@@ -12,7 +13,7 @@ export default function HomeScreen({ onSelect }) {
         What would you like to do?
       </Typography>
       <Grid container spacing={3} justifyContent="center">
-        <Grid item xs={12} sm={5}>
+        <Grid item xs={12} sm={4}>
           <Card elevation={2}>
             <CardActionArea onClick={() => onSelect('meal_plan')} sx={{ py: 3 }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
@@ -25,7 +26,7 @@ export default function HomeScreen({ onSelect }) {
             </CardActionArea>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={5}>
+        <Grid item xs={12} sm={4}>
           <Card elevation={2}>
             <CardActionArea onClick={() => onSelect('usuals')} sx={{ py: 3 }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
@@ -33,6 +34,19 @@ export default function HomeScreen({ onSelect }) {
                 <Typography variant="h6">Restock Usuals</Typography>
                 <Typography variant="body2" color="text.secondary" align="center">
                   Add your regular breakfast, lunch, and snack items to Reminders
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card elevation={2}>
+            <CardActionArea onClick={() => onSelect('reorder')} sx={{ py: 3 }}>
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                <SortIcon sx={{ fontSize: 52, color: 'success.main' }} />
+                <Typography variant="h6">Organize List</Typography>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  Reorder a Reminders list by grocery store layout
                 </Typography>
               </CardContent>
             </CardActionArea>

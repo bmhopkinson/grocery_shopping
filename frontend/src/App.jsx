@@ -19,6 +19,7 @@ import CompletionScreen from './components/CompletionScreen'
 import StatusDisplay from './components/StatusDisplay'
 import HomeScreen from './components/HomeScreen'
 import UsualsList from './components/UsualsList'
+import ReorderReminders from './components/ReorderReminders'
 
 const STEPS = ['Select Cuisine', 'Choose Recipe', 'Review Ingredients', 'Add to Reminders']
 
@@ -222,6 +223,32 @@ export default function App() {
             </Typography>
           </Box>
           <UsualsList />
+        </Paper>
+      </Container>
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // Reorder mode
+  // -------------------------------------------------------------------------
+  if (mode === 'reorder') {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Button
+              startIcon={<ArrowBackIcon />}
+              onClick={goHome}
+              size="small"
+              sx={{ mr: 2 }}
+            >
+              Home
+            </Button>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              Organize List
+            </Typography>
+          </Box>
+          <ReorderReminders />
         </Paper>
       </Container>
     )

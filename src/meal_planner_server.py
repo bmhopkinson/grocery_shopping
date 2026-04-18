@@ -27,12 +27,14 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional, Union
 
 from fastapi import FastAPI, HTTPException
+from langchain_core.messages import HumanMessage
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from langgraph.types import Command
 
 import reminders as reminders_client
+from nodes.base import get_llm
 from meal_planner import build_meal_planner_graph, get_checkpointer_async, get_connection_pool
 from usuals import init_usuals_table, get_usuals, create_usual, update_usual, delete_usual
 from server.sse import (
@@ -129,6 +131,38 @@ class UsualUpdateRequest(BaseModel):
 class AddUsualsToRemindersRequest(BaseModel):
     usual_ids: list[str]
     list_name: str
+
+
+class ReorderRemindersRequest(BaseModel):
+    list_name: str
+
+
+class ReorderedList(BaseModel):
+    items: list[str]
+
+
+STORE_SECTION_ORDER = [
+    "deli",
+    "fresh bread",
+    "speciality cheese",
+    "produce",
+    "meat",
+    "pickles, mayo, salad dressing",
+    "international dry goods",
+    "pasta, tomato sauce, italian dry goods",
+    "soup, broth, bullion",
+    "cereal and breakfast snacks",
+    "peanut butter and jelly",
+    "coffee",
+    "baking goods, spices",
+    "cookies, chocolate, candy",
+    "snacks - chips, pretzels, popcorn",
+    "dairy",
+    "frozen",
+    "beer and wine",
+    "paper items",
+    "pharmacy"
+]
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +509,49 @@ async def delete_usual_endpoint(id: str):
     if not deleted:
         raise HTTPException(status_code=404, detail="Usual not found")
     return {"deleted": True}
+
+
+@app.post("/reorder-reminders")
+async def reorder_reminders(request: ReorderRemindersRequest):
+    """
+    Reorder all items in a Reminders list by grocery store section order.
+
+    Fetches current items, uses an LLM to sort them by store layout, then
+    deletes and re-creates them in the new order.
+    """
+    logger.info(f"POST /reorder-reminders - list_name={request.list_name!r}")
+
+    items = await asyncio.to_thread(reminders_client.get_reminders, request.list_name)
+    if not items:
+        return {"list_name": request.list_name, "reordered_items": [], "count": 0}
+
+    sections_text = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(STORE_SECTION_ORDER))
+    items_text = "\n".join(f"- {item}" for item in items)
+    prompt = (
+        f"Reorder this grocery list by store section (front to back).\n\n"
+        f"Store sections:\n{sections_text}\n\n"
+        f"Grocery list:\n{items_text}\n\n"
+        f"Return every item exactly once, ordered by store section. "
+        f"Items that don't fit a section go at the end."
+    )
+
+    llm = get_llm()
+    response = await llm.with_structured_output(ReorderedList).ainvoke([HumanMessage(content=prompt)])
+    reordered = response.items
+
+    # Validate we got sensible output (same count ± tolerance)
+    if abs(len(reordered) - len(items)) > 2:
+        logger.warning(
+            f"reorder_reminders: item count mismatch original={len(items)} reordered={len(reordered)}"
+        )
+        raise HTTPException(status_code=500, detail="LLM returned unexpected item count")
+
+    await asyncio.to_thread(reminders_client.delete_reminders_batch, request.list_name, items)
+    for item in reordered:
+        await asyncio.to_thread(reminders_client.create_reminder, request.list_name, item)
+
+    logger.info(f"reorder_reminders: reordered {len(reordered)} items in {request.list_name!r}")
+    return {"list_name": request.list_name, "reordered_items": reordered, "count": len(reordered)}
 
 
 @app.get("/health")
