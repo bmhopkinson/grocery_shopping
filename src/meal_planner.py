@@ -93,6 +93,11 @@ def get_checkpointer():
     return None
 
 
+def get_connection_pool() -> AsyncConnectionPool | None:
+    """Return the shared async connection pool, or None if not using PostgreSQL."""
+    return _connection_pool
+
+
 from nodes import (
     search_meals,
     parse_meals,

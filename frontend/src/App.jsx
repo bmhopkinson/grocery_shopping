@@ -1,11 +1,24 @@
 import { useState, useCallback } from 'react'
-import { Container, Paper, Stepper, Step, StepLabel, Box, Alert } from '@mui/material'
+import {
+  Container,
+  Paper,
+  Stepper,
+  Step,
+  StepLabel,
+  Box,
+  Alert,
+  Button,
+  Typography,
+} from '@mui/material'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import CuisineInput from './components/CuisineInput'
 import MealSelection from './components/MealSelection'
 import IngredientReview from './components/IngredientReview'
 import RemindersPrompt from './components/RemindersPrompt'
 import CompletionScreen from './components/CompletionScreen'
 import StatusDisplay from './components/StatusDisplay'
+import HomeScreen from './components/HomeScreen'
+import UsualsList from './components/UsualsList'
 
 const STEPS = ['Select Cuisine', 'Choose Recipe', 'Review Ingredients', 'Add to Reminders']
 
@@ -18,13 +31,15 @@ const STAGE_TO_STEP = {
 }
 
 export default function App() {
+  // Top-level mode: 'home' | 'meal_plan' | 'usuals'
+  const [mode, setMode] = useState('home')
+
+  // Meal plan state
   const [stage, setStage] = useState('cuisine_input')
   const [sessionId, setSessionId] = useState(null)
   const [statusMessages, setStatusMessages] = useState([])
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-
-  // Data for each stage
   const [mealOptions, setMealOptions] = useState(null)
   const [ingredients, setIngredients] = useState(null)
   const [remindersData, setRemindersData] = useState(null)
@@ -79,35 +94,29 @@ export default function App() {
         setSessionId(data.session_id)
         addStatus(`Session started: ${data.session_id}`)
         break
-
       case 'status':
         addStatus(data.message)
         break
-
       case 'meal_options':
         setMealOptions(data)
         setStage('meal_options')
         setLoading(false)
         break
-
       case 'ingredient_review':
         setIngredients(data)
         setStage('ingredient_review')
         setLoading(false)
         break
-
       case 'reminders_prompt':
         setRemindersData(data)
         setStage('reminders_prompt')
         setLoading(false)
         break
-
       case 'complete':
         setCompletionData(data)
         setStage('complete')
         setLoading(false)
         break
-
       case 'error':
         setError(data.message)
         setLoading(false)
@@ -121,7 +130,6 @@ export default function App() {
     setStatusMessages([])
 
     try {
-      // Build request body based on whether we have a direct URL or cuisine search
       const body = directUrl
         ? { direct_url: directUrl }
         : { cuisine_type: cuisine, preferred_sources: sources }
@@ -161,7 +169,7 @@ export default function App() {
     }
   }, [sessionId, processSSEStream, handleSSEEvent])
 
-  const resetApp = useCallback(() => {
+  const resetMealPlan = useCallback(() => {
     setStage('cuisine_input')
     setSessionId(null)
     setStatusMessages([])
@@ -173,19 +181,76 @@ export default function App() {
     setCompletionData(null)
   }, [])
 
+  const goHome = useCallback(() => {
+    resetMealPlan()
+    setMode('home')
+  }, [resetMealPlan])
+
   const activeStep = STAGE_TO_STEP[stage] ?? 0
 
+  // -------------------------------------------------------------------------
+  // Home screen
+  // -------------------------------------------------------------------------
+  if (mode === 'home') {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <HomeScreen onSelect={setMode} />
+        </Paper>
+      </Container>
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // Usuals mode
+  // -------------------------------------------------------------------------
+  if (mode === 'usuals') {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Button
+              startIcon={<ArrowBackIcon />}
+              onClick={goHome}
+              size="small"
+              sx={{ mr: 2 }}
+            >
+              Home
+            </Button>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              Restock Usuals
+            </Typography>
+          </Box>
+          <UsualsList />
+        </Paper>
+      </Container>
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // Meal plan mode
+  // -------------------------------------------------------------------------
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Paper elevation={3} sx={{ p: 3 }}>
-        <Box sx={{ mb: 4 }}>
-          <Stepper activeStep={activeStep} alternativeLabel>
-            {STEPS.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={goHome}
+            size="small"
+            sx={{ mr: 2 }}
+          >
+            Home
+          </Button>
+          <Box sx={{ flex: 1 }}>
+            <Stepper activeStep={activeStep} alternativeLabel>
+              {STEPS.map((label) => (
+                <Step key={label}>
+                  <StepLabel>{label}</StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </Box>
         </Box>
 
         {error && (
@@ -201,31 +266,19 @@ export default function App() {
         )}
 
         {stage === 'meal_options' && mealOptions && (
-          <MealSelection
-            data={mealOptions}
-            onSelect={resumeSession}
-            loading={loading}
-          />
+          <MealSelection data={mealOptions} onSelect={resumeSession} loading={loading} />
         )}
 
         {stage === 'ingredient_review' && ingredients && (
-          <IngredientReview
-            data={ingredients}
-            onSubmit={resumeSession}
-            loading={loading}
-          />
+          <IngredientReview data={ingredients} onSubmit={resumeSession} loading={loading} />
         )}
 
         {stage === 'reminders_prompt' && remindersData && (
-          <RemindersPrompt
-            data={remindersData}
-            onSubmit={resumeSession}
-            loading={loading}
-          />
+          <RemindersPrompt data={remindersData} onSubmit={resumeSession} loading={loading} />
         )}
 
         {stage === 'complete' && completionData && (
-          <CompletionScreen data={completionData} onReset={resetApp} />
+          <CompletionScreen data={completionData} onReset={resetMealPlan} />
         )}
       </Paper>
     </Container>

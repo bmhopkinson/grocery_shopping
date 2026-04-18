@@ -18,6 +18,7 @@ Event types sent via SSE:
 Usage: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000
 """
 
+import asyncio
 import logging
 import logging.handlers
 import uuid
@@ -31,7 +32,9 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from langgraph.types import Command
 
-from meal_planner import build_meal_planner_graph, get_checkpointer_async
+import reminders as reminders_client
+from meal_planner import build_meal_planner_graph, get_checkpointer_async, get_connection_pool
+from usuals import init_usuals_table, get_usuals, create_usual, update_usual, delete_usual
 from server.sse import (
     sse_event,
     serialize_model,
@@ -111,6 +114,21 @@ class PlanRequest(BaseModel):
 
 class ResumeRequest(BaseModel):
     input: Union[str, dict]  # Support both string (CLI) and structured (frontend) input
+
+
+class UsualCreateRequest(BaseModel):
+    name: str
+    category: Optional[str] = None
+
+
+class UsualUpdateRequest(BaseModel):
+    name: str
+    category: Optional[str] = None
+
+
+class AddUsualsToRemindersRequest(BaseModel):
+    usual_ids: list[str]
+    list_name: str
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +261,7 @@ async def stream_graph_execution(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize checkpointer on startup, cleanup on shutdown."""
+    """Initialize checkpointer and usuals table on startup, cleanup on shutdown."""
     global _checkpointer
     logger.info("FastAPI lifespan startup - initializing checkpointer...")
     try:
@@ -252,6 +270,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception(f"Failed to initialize checkpointer: {e}")
         raise
+    pool = get_connection_pool()
+    await init_usuals_table(pool)
+    logger.info("Usuals table ready")
     yield
     logger.info("FastAPI lifespan shutdown - clearing sessions...")
     sessions.clear()
@@ -390,6 +411,70 @@ async def delete_session(session_id: str):
         return {"deleted": True}
     logger.warning(f"DELETE /sessions/{session_id} - session not found")
     raise HTTPException(status_code=404, detail="Session not found")
+
+
+@app.get("/reminder-lists")
+async def get_reminder_lists():
+    """Return all Apple Reminders list names."""
+    lists = await asyncio.to_thread(reminders_client.get_all_lists)
+    return {"lists": lists}
+
+
+# ---------------------------------------------------------------------------
+# Usuals endpoints  (specific routes before /{id} to avoid path conflicts)
+# ---------------------------------------------------------------------------
+
+@app.get("/usuals")
+async def list_usuals():
+    pool = get_connection_pool()
+    return await get_usuals(pool)
+
+
+@app.post("/usuals/add-to-reminders")
+async def add_usuals_to_reminders(request: AddUsualsToRemindersRequest):
+    pool = get_connection_pool()
+    all_usuals = await get_usuals(pool)
+    id_set = set(request.usual_ids)
+    selected = [u for u in all_usuals if u["id"] in id_set]
+
+    if not selected:
+        raise HTTPException(status_code=400, detail="No matching usuals found")
+
+    list_exists = await asyncio.to_thread(reminders_client.list_exists, request.list_name)
+    if not list_exists:
+        await asyncio.to_thread(reminders_client.create_list, request.list_name)
+
+    added, failed = [], []
+    for item in selected:
+        ok = await asyncio.to_thread(reminders_client.create_reminder, request.list_name, item["name"])
+        (added if ok else failed).append(item["name"])
+
+    logger.info(f"add_usuals_to_reminders: added={added}, failed={failed}, list={request.list_name!r}")
+    return {"added": added, "failed": failed, "list_name": request.list_name}
+
+
+@app.post("/usuals")
+async def create_usual_endpoint(request: UsualCreateRequest):
+    pool = get_connection_pool()
+    return await create_usual(pool, request.name, request.category)
+
+
+@app.put("/usuals/{id}")
+async def update_usual_endpoint(id: str, request: UsualUpdateRequest):
+    pool = get_connection_pool()
+    item = await update_usual(pool, id, request.name, request.category)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Usual not found")
+    return item
+
+
+@app.delete("/usuals/{id}")
+async def delete_usual_endpoint(id: str):
+    pool = get_connection_pool()
+    deleted = await delete_usual(pool, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Usual not found")
+    return {"deleted": True}
 
 
 @app.get("/health")
