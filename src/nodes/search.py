@@ -4,6 +4,8 @@ Search-related graph nodes.
 Handles recipe discovery, parsing, validation, and refinement.
 """
 
+import time
+import logging
 from typing import List
 
 from langchain_core.messages import AIMessage
@@ -25,6 +27,23 @@ from prompts import (
 from nodes.base import get_llm, get_search_tool, invoke_structured
 import ui
 
+logger = logging.getLogger(__name__)
+
+
+def _search_with_retry(query: str, retries: int = 2, delay: float = 1.5) -> str:
+    """Invoke DuckDuckGo search with retry on transient network errors."""
+    search_tool = get_search_tool()
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            return search_tool.invoke(query)
+        except Exception as e:
+            last_exc = e
+            logger.warning(f"Search attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(delay)
+    raise RuntimeError(f"Search failed after {retries} attempts: {last_exc}") from last_exc
+
 
 def search_meals(state: MealPlannerState) -> dict:
     """
@@ -36,9 +55,8 @@ def search_meals(state: MealPlannerState) -> dict:
     cuisine = state["cuisine_type"]
     ui.show_searching(cuisine)
 
-    search_tool = get_search_tool()
     query = f"{cuisine} dinner recipe with ingredients"
-    results = search_tool.invoke(query)
+    results = _search_with_retry(query)
 
     ui.show_search_complete()
     return {"search_results": results}
@@ -146,8 +164,6 @@ def refine_search(state: MealPlannerState) -> dict:
     dish_names = state.get("refine_dishes", [])
     existing_valid = state.get("meal_options", [])
 
-    search_tool = get_search_tool()
-
     # Generate dish names if not provided
     if not dish_names:
         dish_prompt = get_dish_names_prompt(cuisine)
@@ -160,8 +176,14 @@ def refine_search(state: MealPlannerState) -> dict:
     all_results = []
     for dish in dish_names[:5]:
         query = get_refine_search_query(dish, sources)
-        results = search_tool.invoke(query)
-        all_results.append(f"--- {dish} ---\n{results}")
+        try:
+            results = _search_with_retry(query)
+            all_results.append(f"--- {dish} ---\n{results}")
+        except RuntimeError as e:
+            logger.warning(f"Skipping dish '{dish}' due to search failure: {e}")
+
+    if not all_results:
+        raise RuntimeError("All recipe searches failed — search backend may be unavailable. Please try again.")
 
     combined_results = "\n\n".join(all_results)
 
