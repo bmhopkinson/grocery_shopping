@@ -12,9 +12,9 @@ const theme = createTheme({
       contrastText: '#fff',
     },
     secondary: {
-      main: '#b5663a',
-      light: '#d4886a',
-      dark: '#8a4220',
+      main: '#4e7da3',
+      light: '#7aa3c4',
+      dark: '#2d5878',
       contrastText: '#fff',
     },
     background: {
@@ -73,6 +73,14 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 6,
+        },
+      },
+    },
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          backgroundImage: 'radial-gradient(circle, rgba(74, 124, 89, 0.055) 1px, transparent 1px)',
+          backgroundSize: '26px 26px',
         },
       },
     },

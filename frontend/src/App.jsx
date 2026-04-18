@@ -9,6 +9,7 @@ import HomeScreen from './components/HomeScreen'
 import UsualsList from './components/UsualsList'
 import ReorderReminders from './components/ReorderReminders'
 import PageShell from './components/PageShell'
+import BotanicalBanner from './components/BotanicalBanner'
 import { useMealPlanSession } from './hooks/useMealPlanSession'
 import { useState } from 'react'
 
@@ -20,6 +21,15 @@ const STAGE_TO_STEP = {
   ingredient_review: 2,
   reminders_prompt: 3,
   complete: 4,
+}
+
+function AppLayout({ children }) {
+  return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <BotanicalBanner />
+      {children}
+    </Box>
+  )
 }
 
 export default function App() {
@@ -34,64 +44,72 @@ export default function App() {
 
   if (mode === 'home') {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Paper elevation={3} sx={{ p: 3 }}>
-          <HomeScreen onSelect={setMode} />
-        </Paper>
-      </Container>
+      <AppLayout>
+        <Container maxWidth="md" sx={{ py: 4 }}>
+          <Paper elevation={3} sx={{ p: 3 }}>
+            <HomeScreen onSelect={setMode} />
+          </Paper>
+        </Container>
+      </AppLayout>
     )
   }
 
   if (mode === 'usuals') {
     return (
-      <PageShell onBack={goHome} header={<Typography variant="h6">Restock Usuals</Typography>}>
-        <UsualsList />
-      </PageShell>
+      <AppLayout>
+        <PageShell onBack={goHome} header={<Typography variant="h6">Restock Usuals</Typography>}>
+          <UsualsList />
+        </PageShell>
+      </AppLayout>
     )
   }
 
   if (mode === 'reorder') {
     return (
-      <PageShell onBack={goHome} header={<Typography variant="h6">Organize List</Typography>}>
-        <ReorderReminders />
-      </PageShell>
+      <AppLayout>
+        <PageShell onBack={goHome} header={<Typography variant="h6">Organize List</Typography>}>
+          <ReorderReminders />
+        </PageShell>
+      </AppLayout>
     )
   }
 
   const activeStep = STAGE_TO_STEP[stage] ?? 0
 
   return (
-    <PageShell
-      onBack={goHome}
-      header={
-        <Stepper activeStep={activeStep} alternativeLabel>
-          {STEPS.map(label => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
-        </Stepper>
-      }
-    >
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+    <AppLayout>
+      <PageShell
+        onBack={goHome}
+        header={
+          <Stepper activeStep={activeStep} alternativeLabel>
+            {STEPS.map(label => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
+          </Stepper>
+        }
+      >
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
 
-      <StatusDisplay messages={statusMessages} loading={loading} />
+        <StatusDisplay messages={statusMessages} loading={loading} />
 
-      {stage === 'cuisine_input' && (
-        <CuisineInput onSubmit={startPlan} loading={loading} />
-      )}
-      {stage === 'meal_options' && mealOptions && (
-        <MealSelection data={mealOptions} onSelect={resumeSession} loading={loading} />
-      )}
-      {stage === 'ingredient_review' && ingredients && (
-        <IngredientReview data={ingredients} onSubmit={resumeSession} loading={loading} />
-      )}
-      {stage === 'reminders_prompt' && remindersData && (
-        <RemindersPrompt data={remindersData} onSubmit={resumeSession} loading={loading} />
-      )}
-      {stage === 'complete' && completionData && (
-        <CompletionScreen data={completionData} onReset={reset} />
-      )}
-    </PageShell>
+        {stage === 'cuisine_input' && (
+          <CuisineInput onSubmit={startPlan} loading={loading} />
+        )}
+        {stage === 'meal_options' && mealOptions && (
+          <MealSelection data={mealOptions} onSelect={resumeSession} loading={loading} />
+        )}
+        {stage === 'ingredient_review' && ingredients && (
+          <IngredientReview data={ingredients} onSubmit={resumeSession} loading={loading} />
+        )}
+        {stage === 'reminders_prompt' && remindersData && (
+          <RemindersPrompt data={remindersData} onSubmit={resumeSession} loading={loading} />
+        )}
+        {stage === 'complete' && completionData && (
+          <CompletionScreen data={completionData} onReset={reset} />
+        )}
+      </PageShell>
+    </AppLayout>
   )
 }
