@@ -4,6 +4,9 @@ Server components for the Meal Planner API.
 This package contains:
 - sse: SSE event factory and serialization utilities
 - interrupts: Interrupt type registry and handlers
+- sessions: Session class and in-memory session store
+- graph_runner: Graph execution streaming
+- reorder: Grocery list reordering by store section
 """
 
 from server.sse import (

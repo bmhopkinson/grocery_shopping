@@ -24,29 +24,20 @@ import logging.handlers
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, Optional, Union
+from typing import Optional, Union
 
 from fastapi import FastAPI, HTTPException
-from langchain_core.messages import HumanMessage, SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-from langgraph.types import Command
 
 import reminders as reminders_client
-from nodes.base import get_llm
-from meal_planner import build_meal_planner_graph, get_checkpointer_async, get_connection_pool
+from meal_planner import get_checkpointer_async, get_connection_pool
 from usuals import init_usuals_table, get_usuals, create_usual, update_usual, delete_usual
-from server.sse import (
-    sse_event,
-    serialize_model,
-    session_start_event,
-    status_event,
-    error_event,
-    complete_event,
-    grocery_list_event,
-)
-from server.interrupts import detect_interrupt
+from server.sse import serialize_model, session_start_event
+from server.sessions import Session, sessions
+from server.graph_runner import stream_graph_execution
+from server.reorder import reorder_reminders_list
 
 
 # ---------------------------------------------------------------------------
@@ -76,46 +67,17 @@ _checkpointer = None
 
 
 # ---------------------------------------------------------------------------
-# Session Management
-# ---------------------------------------------------------------------------
-
-class Session:
-    """Holds state for an active meal planning session."""
-
-    def __init__(
-        self,
-        session_id: str,
-        cuisine_type: str = "",
-        direct_url: str = "",
-        preferred_sources: list[str] = None
-    ):
-        self.session_id = session_id
-        self.cuisine_type = cuisine_type
-        self.direct_url = direct_url
-        self.preferred_sources = preferred_sources or []
-        self.thread_id = f"session-{session_id}"
-        self.graph = build_meal_planner_graph(checkpointer=_checkpointer)
-        self.started = False
-        self.completed = False
-        self.last_state = None
-
-
-# In-memory session store (use Redis for production)
-sessions: dict[str, Session] = {}
-
-
-# ---------------------------------------------------------------------------
 # Request/Response Models
 # ---------------------------------------------------------------------------
 
 class PlanRequest(BaseModel):
     cuisine_type: str = ""
-    direct_url: str = ""  # Direct recipe URL (skips search if provided)
+    direct_url: str = ""
     preferred_sources: list[str] = []
 
 
 class ResumeRequest(BaseModel):
-    input: Union[str, dict]  # Support both string (CLI) and structured (frontend) input
+    input: Union[str, dict]
 
 
 class UsualCreateRequest(BaseModel):
@@ -135,159 +97,6 @@ class AddUsualsToRemindersRequest(BaseModel):
 
 class ReorderRemindersRequest(BaseModel):
     list_name: str
-
-
-class ReorderedList(BaseModel):
-    items: list[str]
-
-
-STORE_SECTION_ORDER = [
-    "deli",
-    "fresh bread",
-    "speciality cheese",
-    "produce",
-    "meat",
-    "pickles, mayo, salad dressing",
-    "international dry goods",
-    "pasta, tomato sauce, italian dry goods",
-    "soup, broth, bullion",
-    "cereal and breakfast snacks",
-    "peanut butter and jelly",
-    "coffee",
-    "baking goods, spices",
-    "cooking oils and vinegar",
-    "cookies, chocolate, candy",
-    "snacks - chips, pretzels, popcorn",
-    "packaged bread and rolls",
-    "dairy and eggs",
-    "frozen",
-    "beer and wine",
-    "paper items",
-    "pharmacy"
-]
-
-
-# ---------------------------------------------------------------------------
-# Node Status Messages
-# ---------------------------------------------------------------------------
-
-NODE_MESSAGES = {
-    "create_meal_from_url": "Fetching recipe from URL...",
-    "search_meals": "Searching for recipes...",
-    "parse_meals": "Analyzing search results...",
-    "validate_recipes": "Validating recipe URLs...",
-    "refine_search": "Refining search with specific dishes...",
-    "present_options": "Preparing meal options...",
-    "extract_ingredients": "Extracting ingredients from recipe...",
-    "review_ingredients": "Preparing ingredient list for review...",
-    "add_to_reminders": "Adding items to reminders...",
-}
-
-
-# ---------------------------------------------------------------------------
-# Stream Graph Execution
-# ---------------------------------------------------------------------------
-
-def _build_invoke_input(
-    initial_input: Optional[dict],
-    resume_input: Optional[str]
-):
-    """Build the input for graph invocation."""
-    if resume_input is not None:
-        return Command(resume=resume_input)
-    if initial_input is not None:
-        return initial_input
-    raise ValueError("Must provide either initial_input or resume_input")
-
-
-def _extract_status_event(event: dict) -> Optional[dict]:
-    """Extract status event from graph stream event if applicable."""
-    if event.get("event") == "on_chain_start":
-        node_name = event.get("name")
-        if node_name in NODE_MESSAGES:
-            return status_event(node_name, NODE_MESSAGES[node_name])
-    return None
-
-
-def _handle_interrupt(state) -> dict:
-    """Handle an interrupt state and return the appropriate SSE event."""
-    # Extract interrupt value
-    interrupt_value = None
-    if state.tasks and state.tasks[0].interrupts:
-        interrupt_value = state.tasks[0].interrupts[0].value
-
-    next_node = state.next[0] if state.next else None
-
-    # Use the interrupt registry to detect and build event
-    match = detect_interrupt(next_node, interrupt_value)
-    return sse_event(match.event_name, match.event_data)
-
-
-async def _handle_completion(session: Session, state) -> AsyncGenerator[dict, None]:
-    """Handle graph completion and yield final events."""
-    session.completed = True
-    values = state.values
-
-    # Check for errors in state
-    error = values.get("error")
-    if error:
-        yield error_event(error)
-        return
-
-    # Extract completion data
-    selected_meal = values.get("selected_meal")
-    grocery_list = values.get("grocery_list", [])
-    reminders_added = values.get("reminders_added", False)
-
-    # Emit grocery list if present
-    if grocery_list:
-        yield grocery_list_event(grocery_list)
-
-    # Emit completion
-    yield complete_event(selected_meal, grocery_list, reminders_added)
-
-
-async def stream_graph_execution(
-    session: Session,
-    initial_input: Optional[dict] = None,
-    resume_input: Optional[str] = None
-) -> AsyncGenerator[dict, None]:
-    """
-    Stream graph execution as SSE events.
-
-    Yields events until completion or an interrupt is hit.
-    """
-    config = {"configurable": {"thread_id": session.thread_id}}
-    graph = session.graph
-
-    logger.info(f"stream_graph_execution started for session {session.session_id}")
-
-    try:
-        # Determine invocation input
-        invoke_input = _build_invoke_input(initial_input, resume_input)
-
-        # Stream node execution events
-        async for event in graph.astream_events(invoke_input, config=config, version="v2"):
-            status = _extract_status_event(event)
-            if status:
-                yield status
-
-        # Check final state
-        state = await graph.aget_state(config)
-        session.last_state = state
-
-        # Handle interrupt or completion
-        if state.next:
-            logger.info(f"Session {session.session_id} - interrupt at node(s): {list(state.next)}")
-            yield _handle_interrupt(state)
-        else:
-            logger.info(f"Session {session.session_id} - graph completed")
-            async for event in _handle_completion(session, state):
-                yield event
-
-    except Exception as e:
-        logger.exception(f"Session {session.session_id} - error in stream_graph_execution: {e}")
-        yield error_event(str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +128,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Restrict in production
@@ -328,6 +136,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------------------------------------------------------------------------
+# Planning routes
+# ---------------------------------------------------------------------------
 
 @app.post("/plan")
 async def start_plan(request: PlanRequest):
@@ -338,20 +150,23 @@ async def start_plan(request: PlanRequest):
     - Search mode: Provide cuisine_type to search for recipes
     - URL mode: Provide direct_url to skip directly to processing a specific recipe
 
-    Returns an SSE stream with events for the planning process.
-    First event will be 'session_start' with the session_id needed for /resume.
+    Returns an SSE stream. First event is 'session_start' with the session_id.
     """
-    logger.info(f"POST /plan - cuisine_type={request.cuisine_type!r}, direct_url={request.direct_url!r}, preferred_sources={request.preferred_sources}")
+    logger.info(
+        f"POST /plan - cuisine_type={request.cuisine_type!r}, "
+        f"direct_url={request.direct_url!r}, preferred_sources={request.preferred_sources}"
+    )
 
     session_id = str(uuid.uuid4())[:8]
-    logger.info(f"POST /plan - created session {session_id}")
     session = Session(
         session_id,
         cuisine_type=request.cuisine_type,
         direct_url=request.direct_url,
-        preferred_sources=request.preferred_sources
+        preferred_sources=request.preferred_sources,
+        checkpointer=_checkpointer,
     )
     sessions[session_id] = session
+    logger.info(f"POST /plan - created session {session_id}")
 
     initial_state = {
         "direct_url": request.direct_url if request.direct_url else None,
@@ -364,14 +179,11 @@ async def start_plan(request: PlanRequest):
         "refinement_count": 0,
         "refine_dishes": None,
         "grocery_list": None,
-        "reminders_added": None
+        "reminders_added": None,
     }
 
     async def event_generator():
-        # First event: session ID
         yield session_start_event(session_id)
-
-        # Stream graph execution
         async for event in stream_graph_execution(session, initial_input=initial_state):
             yield event
 
@@ -380,19 +192,13 @@ async def start_plan(request: PlanRequest):
 
 @app.post("/sessions/{session_id}/resume")
 async def resume_session(session_id: str, request: ResumeRequest):
-    """
-    Resume a session from an interrupt.
-
-    Returns an SSE stream continuing from where the interrupt occurred.
-    """
+    """Resume a session from an interrupt. Returns an SSE stream."""
     logger.info(f"POST /sessions/{session_id}/resume - input={request.input!r}")
 
     session = sessions.get(session_id)
-
     if not session:
         logger.warning(f"POST /sessions/{session_id}/resume - session not found")
         raise HTTPException(status_code=404, detail="Session not found")
-
     if session.completed:
         logger.warning(f"POST /sessions/{session_id}/resume - session already completed")
         raise HTTPException(status_code=400, detail="Session already completed")
@@ -404,35 +210,30 @@ async def resume_session(session_id: str, request: ResumeRequest):
     return EventSourceResponse(event_generator())
 
 
+# ---------------------------------------------------------------------------
+# Session management routes
+# ---------------------------------------------------------------------------
+
 @app.get("/sessions/{session_id}")
 async def get_session_state(session_id: str):
     """Get the current state of a session (for debugging/recovery)."""
     logger.info(f"GET /sessions/{session_id}")
 
     session = sessions.get(session_id)
-
     if not session:
         logger.warning(f"GET /sessions/{session_id} - session not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     state = session.last_state
     if not state:
-        return {
-            "session_id": session_id,
-            "cuisine_type": session.cuisine_type,
-            "completed": session.completed,
-            "state": None
-        }
+        return {"session_id": session_id, "cuisine_type": session.cuisine_type, "completed": session.completed, "state": None}
 
     return {
         "session_id": session_id,
         "cuisine_type": session.cuisine_type,
         "completed": session.completed,
         "next": list(state.next) if state.next else [],
-        "values": {
-            k: serialize_model(v)
-            for k, v in state.values.items()
-        }
+        "values": {k: serialize_model(v) for k, v in state.values.items()},
     }
 
 
@@ -448,6 +249,10 @@ async def delete_session(session_id: str):
     raise HTTPException(status_code=404, detail="Session not found")
 
 
+# ---------------------------------------------------------------------------
+# Reminders routes
+# ---------------------------------------------------------------------------
+
 @app.get("/reminder-lists")
 async def get_reminder_lists():
     """Return all Apple Reminders list names."""
@@ -455,8 +260,15 @@ async def get_reminder_lists():
     return {"lists": lists}
 
 
+@app.post("/reorder-reminders")
+async def reorder_reminders(request: ReorderRemindersRequest):
+    """Reorder all items in a Reminders list by grocery store section order."""
+    logger.info(f"POST /reorder-reminders - list_name={request.list_name!r}")
+    return await reorder_reminders_list(request.list_name)
+
+
 # ---------------------------------------------------------------------------
-# Usuals endpoints  (specific routes before /{id} to avoid path conflicts)
+# Usuals routes
 # ---------------------------------------------------------------------------
 
 @app.get("/usuals")
@@ -512,64 +324,11 @@ async def delete_usual_endpoint(id: str):
     return {"deleted": True}
 
 
-@app.post("/reorder-reminders")
-async def reorder_reminders(request: ReorderRemindersRequest):
-    """
-    Reorder all items in a Reminders list by grocery store section order.
-
-    Fetches current items, uses an LLM to sort them by store layout, then
-    deletes and re-creates them in the new order.
-    """
-    logger.info(f"POST /reorder-reminders - list_name={request.list_name!r}")
-
-    items = await asyncio.to_thread(reminders_client.get_reminders, request.list_name)
-    if not items:
-        return {"list_name": request.list_name, "reordered_items": [], "count": 0}
-
-    sections_text = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(STORE_SECTION_ORDER))
-    items_text = "\n".join(f"- {item}" for item in items)
-    system = (
-        "You are a grocery store layout expert. Your job is to sort grocery lists by physical "
-        "store section so a shopper can walk front-to-back without backtracking.\n\n"
-        "Rules:\n"
-        "- Return every item EXACTLY as given — do not alter text, spelling, or quantity info in parentheses.\n"
-        "- Each item appears exactly once.\n"
-        "- Group items by their most likely store section and sort groups in the section order provided.\n"
-        "- Within each section, keep items in any order.\n"
-        "- Items that don't clearly fit any section go at the very end.\n"
-        "- Use common sense: eggs → dairy, butter → dairy, chicken → meat, apples → produce, "
-        "olive oil → cooking oils and vinegar, flour/sugar → baking goods, etc."
-    )
-    prompt = (
-        f"Store sections (in order, front to back):\n{sections_text}\n\n"
-        f"Grocery list to sort ({len(items)} items):\n{items_text}\n\n"
-        f"Return all {len(items)} items sorted by section order. "
-        f"Copy each item verbatim — including any quantity in parentheses."
-    )
-
-    llm = get_llm()
-    response = await llm.with_structured_output(ReorderedList).ainvoke(
-        [SystemMessage(content=system), HumanMessage(content=prompt)]
-    )
-    reordered = response.items
-
-    # Validate we got sensible output (same count ± tolerance)
-    if abs(len(reordered) - len(items)) > 2:
-        logger.warning(
-            f"reorder_reminders: item count mismatch original={len(items)} reordered={len(reordered)}"
-        )
-        raise HTTPException(status_code=500, detail="LLM returned unexpected item count")
-
-    await asyncio.to_thread(reminders_client.delete_reminders_batch, request.list_name, items)
-    for item in reordered:
-        await asyncio.to_thread(reminders_client.create_reminder, request.list_name, item)
-
-    logger.info(f"reorder_reminders: reordered {len(reordered)} items in {request.list_name!r}")
-    return {"list_name": request.list_name, "reordered_items": reordered, "count": len(reordered)}
-
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
     logger.debug(f"GET /health - active_sessions={len(sessions)}")
     return {"status": "ok", "active_sessions": len(sessions)}
