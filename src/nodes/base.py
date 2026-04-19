@@ -24,7 +24,7 @@ def get_llm() -> ChatOpenAI:
     """Get the singleton LLM instance."""
     global _llm
     if _llm is None:
-        _llm = ChatOpenAI(model="gpt-5.2", temperature=0)
+        _llm = ChatOpenAI(model="gpt-5.4", temperature=0.2)
     return _llm
 
 
