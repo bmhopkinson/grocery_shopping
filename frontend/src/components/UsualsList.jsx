@@ -29,7 +29,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Cancel'
-import AddToRemindersDialog from './AddToRemindersDialog'
+import AddToWorkingListDialog from './AddToWorkingListDialog'
 
 const CATEGORIES = ['Breakfast', 'Lunch', 'Snacks', 'Other']
 
@@ -112,28 +112,39 @@ export default function UsualsList() {
     })
   }
 
-  const openRemindersDialog = async () => {
+  const openAddToListDialog = async () => {
     let lists = []
     try {
-      const res = await fetch('/api/reminder-lists')
-      if (res.ok) lists = (await res.json()).lists || []
+      const res = await fetch('/api/working-lists')
+      if (res.ok) lists = await res.json()
     } catch { /* use empty list */ }
     setDialog({ open: true, lists, submitting: false })
   }
 
-  const handleAddToReminders = async (listName) => {
+  const handleAddToWorkingList = async (listIdOrCreate) => {
     setDialog(d => ({ ...d, submitting: true }))
     try {
-      const res = await fetch('/api/usuals/add-to-reminders', {
+      let workingListId = listIdOrCreate
+      if (typeof listIdOrCreate === 'object' && listIdOrCreate.action === 'create') {
+        const createRes = await fetch('/api/working-lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: listIdOrCreate.list_name }),
+        })
+        if (!createRes.ok) throw new Error('Failed to create list')
+        const newList = await createRes.json()
+        workingListId = newList.id
+      }
+      const res = await fetch('/api/usuals/add-to-working-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usual_ids: Array.from(selected), list_name: listName }),
+        body: JSON.stringify({ usual_ids: Array.from(selected), working_list_id: workingListId }),
       })
-      if (!res.ok) throw new Error('Failed to add to Reminders')
+      if (!res.ok) throw new Error('Failed to add to list')
       const data = await res.json()
       setDialog(d => ({ ...d, open: false, submitting: false }))
       setSelected(new Set())
-      setSuccess(`Added ${data.added.length} item${data.added.length !== 1 ? 's' : ''} to "${data.list_name}"`)
+      setSuccess(`Added ${data.added.length} item${data.added.length !== 1 ? 's' : ''} to shopping list`)
     } catch (e) {
       setError(e.message)
       setDialog(d => ({ ...d, submitting: false }))
@@ -213,9 +224,9 @@ export default function UsualsList() {
             color="secondary"
             startIcon={<NotificationsIcon />}
             disabled={selected.size === 0}
-            onClick={openRemindersDialog}
+            onClick={openAddToListDialog}
           >
-            Add {selected.size > 0 ? selected.size : ''} to Reminders
+            Add {selected.size > 0 ? selected.size : ''} to List
           </Button>
         </Box>
       )}
@@ -295,12 +306,12 @@ export default function UsualsList() {
         ))
       )}
 
-      <AddToRemindersDialog
+      <AddToWorkingListDialog
         open={dialog.open}
         onClose={() => setDialog(d => ({ ...d, open: false }))}
         itemCount={selected.size}
-        reminderLists={dialog.lists}
-        onConfirm={handleAddToReminders}
+        workingLists={dialog.lists}
+        onConfirm={handleAddToWorkingList}
         submitting={dialog.submitting}
       />
     </Box>

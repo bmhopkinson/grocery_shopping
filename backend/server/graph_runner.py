@@ -30,7 +30,7 @@ NODE_MESSAGES = {
     "present_options": "Preparing meal options...",
     "extract_ingredients": "Extracting ingredients from recipe...",
     "review_ingredients": "Preparing ingredient list for review...",
-    "add_to_reminders": "Adding items to reminders...",
+    "add_to_working_list": "Saving items to shopping list...",
 }
 
 

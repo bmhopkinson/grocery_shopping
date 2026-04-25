@@ -1,6 +1,7 @@
 import { Box, Typography, Card, CardActionArea, CardContent, Grid } from '@mui/material'
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 import SortIcon from '@mui/icons-material/Sort'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 
@@ -34,7 +35,20 @@ export default function HomeScreen({ onSelect }) {
                 <ShoppingCartIcon sx={{ fontSize: 52, color: 'secondary.main' }} />
                 <Typography variant="h6">Restock Usuals</Typography>
                 <Typography variant="body2" color="text.secondary" align="center">
-                  Add your regular breakfast, lunch, and snack items to Reminders
+                  Add your regular items to a shopping list
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card elevation={2}>
+            <CardActionArea onClick={() => onSelect('working_lists')} sx={{ py: 3 }}>
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                <ListAltIcon sx={{ fontSize: 52, color: 'info.main' }} />
+                <Typography variant="h6">My Lists</Typography>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  Manage shopping lists, organize by store, send to Reminders
                 </Typography>
               </CardContent>
             </CardActionArea>

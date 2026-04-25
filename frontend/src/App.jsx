@@ -9,12 +9,14 @@ import HomeScreen from './components/HomeScreen'
 import UsualsList from './components/UsualsList'
 import ReorderReminders from './components/ReorderReminders'
 import WeeklyPlanner from './components/WeeklyPlanner'
+import WorkingLists from './components/WorkingLists'
+import WorkingListDetail from './components/WorkingListDetail'
 import PageShell from './components/PageShell'
 import BotanicalBanner from './components/BotanicalBanner'
 import { useMealPlanSession } from './hooks/useMealPlanSession'
 import { useState } from 'react'
 
-const STEPS = ['Select Cuisine', 'Choose Recipe', 'Review Ingredients', 'Add to Reminders']
+const STEPS = ['Select Cuisine', 'Choose Recipe', 'Review Ingredients', 'Add to List']
 
 const STAGE_TO_STEP = {
   cuisine_input: 0,
@@ -35,13 +37,14 @@ function AppLayout({ children }) {
 
 export default function App() {
   const [mode, setMode] = useState('home')
+  const [selectedWorkingList, setSelectedWorkingList] = useState(null)
   const {
     stage, loading, error, setError, statusMessages,
     mealOptions, ingredients, remindersData, completionData,
     startPlan, resumeSession, reset,
   } = useMealPlanSession()
 
-  const goHome = () => { reset(); setMode('home') }
+  const goHome = () => { reset(); setMode('home'); setSelectedWorkingList(null) }
 
   if (mode === 'home') {
     return (
@@ -60,6 +63,23 @@ export default function App() {
       <AppLayout>
         <PageShell onBack={goHome} header={<Typography variant="h6">Restock Usuals</Typography>}>
           <UsualsList />
+        </PageShell>
+      </AppLayout>
+    )
+  }
+
+  if (mode === 'working_lists') {
+    return (
+      <AppLayout>
+        <PageShell onBack={goHome} header={<Typography variant="h6">My Lists</Typography>}>
+          {selectedWorkingList ? (
+            <WorkingListDetail
+              list={selectedWorkingList}
+              onBack={() => setSelectedWorkingList(null)}
+            />
+          ) : (
+            <WorkingLists onSelectList={setSelectedWorkingList} />
+          )}
         </PageShell>
       </AppLayout>
     )

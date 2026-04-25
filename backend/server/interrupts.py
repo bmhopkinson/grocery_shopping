@@ -116,10 +116,10 @@ class IngredientReviewMatcher:
 
 
 class RemindersPromptMatcher:
-    """Matcher for reminders list selection interrupt (add_to_reminders node)."""
+    """Matcher for working list selection interrupt (add_to_working_list node)."""
 
-    KEYWORDS = {"list number", "skip", "list name"}
-    NODES = {"add_to_reminders"}
+    KEYWORDS = {"shopping list", "create a new one"}
+    NODES = {"add_to_working_list"}
 
     def matches(
         self,
@@ -127,13 +127,10 @@ class RemindersPromptMatcher:
         instruction: str,
         interrupt_value: dict | None
     ) -> bool:
-        # Match by node name (most reliable)
         if next_node in self.NODES:
             return True
-        # Check for "existing_lists" key (unique to reminders prompt)
-        if interrupt_value and "existing_lists" in interrupt_value:
+        if interrupt_value and "working_lists" in interrupt_value:
             return True
-        # Fallback to keyword matching
         instruction_lower = instruction.lower()
         return any(kw in instruction_lower for kw in self.KEYWORDS)
 
@@ -144,8 +141,8 @@ class RemindersPromptMatcher:
             event_name="reminders_prompt",
             event_data={
                 "items": iv.get("items", []),
-                "existing_lists": iv.get("existing_lists", []),
-                "prompt": iv.get("prompt", "Select a reminders list:"),
+                "working_lists": iv.get("working_lists", []),
+                "prompt": iv.get("prompt", "Select a shopping list:"),
                 "instruction": iv.get("instruction", "")
             }
         )
@@ -180,7 +177,7 @@ class GenericInterruptMatcher:
 # More specific matchers should come first
 # GenericInterruptMatcher must be last as it always matches
 INTERRUPT_MATCHERS: list[Any] = [
-    RemindersPromptMatcher(),  # Check first - has unique "existing_lists" key
+    RemindersPromptMatcher(),  # Check first - has unique "working_lists" key
     IngredientReviewMatcher(),
     MealSelectionMatcher(),
     GenericInterruptMatcher(),

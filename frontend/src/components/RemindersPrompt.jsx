@@ -14,18 +14,18 @@ import {
   Paper,
   Divider,
 } from '@mui/material'
-import NotificationsIcon from '@mui/icons-material/Notifications'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 
 export default function RemindersPrompt({ data, onSubmit, loading }) {
-  const { items, existing_lists, instruction } = data
-  const [selectedList, setSelectedList] = useState('')
+  const { items, working_lists = [], instruction } = data
+  const [selectedListId, setSelectedListId] = useState(working_lists[0]?.id || '')
   const [newListName, setNewListName] = useState('')
 
   const handleSubmit = () => {
     if (newListName.trim()) {
-      onSubmit(newListName.trim())
-    } else if (selectedList) {
-      onSubmit(selectedList)
+      onSubmit({ action: 'create', list_name: newListName.trim() })
+    } else if (selectedListId) {
+      onSubmit({ action: 'select', list_id: selectedListId })
     }
   }
 
@@ -36,8 +36,8 @@ export default function RemindersPrompt({ data, onSubmit, loading }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <NotificationsIcon color="primary" />
-        <Typography variant="h5">Add to Reminders</Typography>
+        <ListAltIcon color="primary" />
+        <Typography variant="h5">Add to Shopping List</Typography>
       </Box>
 
       {instruction && (
@@ -64,20 +64,20 @@ export default function RemindersPrompt({ data, onSubmit, loading }) {
 
       <Divider sx={{ my: 2 }} />
 
-      {existing_lists && existing_lists.length > 0 && (
+      {working_lists.length > 0 && (
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Select existing list</InputLabel>
           <Select
-            value={selectedList}
+            value={selectedListId}
             label="Select existing list"
             onChange={(e) => {
-              setSelectedList(e.target.value)
+              setSelectedListId(e.target.value)
               setNewListName('')
             }}
           >
-            {existing_lists.map((list) => (
-              <MenuItem key={list} value={list}>
-                {list}
+            {working_lists.map((list) => (
+              <MenuItem key={list.id} value={list.id}>
+                {list.name}
               </MenuItem>
             ))}
           </Select>
@@ -91,11 +91,11 @@ export default function RemindersPrompt({ data, onSubmit, loading }) {
       <TextField
         fullWidth
         label="New list name"
-        placeholder="e.g., Groceries, Weekly Shopping"
+        placeholder="e.g., Weekly Groceries"
         value={newListName}
         onChange={(e) => {
           setNewListName(e.target.value)
-          setSelectedList('')
+          setSelectedListId('')
         }}
         sx={{ mb: 3 }}
       />
@@ -114,10 +114,10 @@ export default function RemindersPrompt({ data, onSubmit, loading }) {
           variant="contained"
           size="large"
           onClick={handleSubmit}
-          disabled={(!selectedList && !newListName.trim()) || loading}
+          disabled={(!selectedListId && !newListName.trim()) || loading}
           sx={{ flex: 2 }}
         >
-          {loading ? 'Adding...' : 'Add to Reminders'}
+          {loading ? 'Saving…' : 'Add to List'}
         </Button>
       </Box>
     </Box>

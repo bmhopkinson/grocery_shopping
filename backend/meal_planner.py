@@ -119,7 +119,7 @@ from nodes import (
     present_options,
     extract_ingredients,
     review_ingredients,
-    add_to_reminders,
+    add_to_working_list,
 )
 
 
@@ -146,7 +146,7 @@ def build_meal_planner_graph(checkpointer=None) -> StateGraph:
     # interrupts to work with an external Postgres checkpointer; flat is simpler)
     builder.add_node("extract_ingredients", extract_ingredients)
     builder.add_node("review_ingredients", review_ingredients)
-    builder.add_node("add_to_reminders", add_to_reminders)
+    builder.add_node("add_to_working_list", add_to_working_list)
 
     # Entry routing: direct URL vs search
     builder.add_conditional_edges(START, route_by_input)
@@ -163,8 +163,8 @@ def build_meal_planner_graph(checkpointer=None) -> StateGraph:
 
     # Meal processing flow
     builder.add_edge("extract_ingredients", "review_ingredients")
-    builder.add_edge("review_ingredients", "add_to_reminders")
-    builder.add_edge("add_to_reminders", END)
+    builder.add_edge("review_ingredients", "add_to_working_list")
+    builder.add_edge("add_to_working_list", END)
 
     if checkpointer is None:
         checkpointer = get_checkpointer()

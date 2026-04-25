@@ -7,7 +7,7 @@ paths:
 
 ## App Modes (`App.jsx`)
 
-`mode` state: `home` | `meal_plan` | `usuals` | `reorder` | `weekly_planner`
+`mode` state: `home` | `meal_plan` | `usuals` | `reorder` | `weekly_planner` | `working_lists`
 
 ## Components
 
@@ -16,13 +16,16 @@ paths:
 | `CuisineInput` | Input form for cuisine type or recipe URL |
 | `MealSelection` | Recipe selection UI (after search) |
 | `IngredientReview` | Ingredient modification UI |
-| `RemindersPrompt` | Confirm adding to Reminders |
+| `RemindersPrompt` | Select/create a working list to receive meal planner items |
 | `CompletionScreen` | Success screen after adding groceries |
 | `StatusDisplay` | Streaming status messages |
 | `HomeScreen` | Landing/home view |
 | `UsualsList` | Manage usual grocery items |
-| `ReorderReminders` | Trigger LLM reorder of a Reminders list |
+| `ReorderReminders` | Trigger LLM reorder of an existing Reminders list |
 | `WeeklyPlanner` | Weekly meal planner with accordion view by week |
+| `WorkingLists` | Grid of all working lists (create/delete) |
+| `WorkingListDetail` | Items in a working list; organize by store, send to Reminders |
+| `AddToWorkingListDialog` | Dialog for selecting/creating a working list |
 
 ## SSE Event Handling
 

@@ -33,7 +33,7 @@ from nodes.processing import (
 )
 
 from nodes.reminders_node import (
-    add_to_reminders,
+    add_to_working_list,
 )
 
 
@@ -51,6 +51,6 @@ __all__ = [
     "present_options",
     "extract_ingredients",
     "review_ingredients",
-    # Reminders
-    "add_to_reminders",
+    # Working list
+    "add_to_working_list",
 ]

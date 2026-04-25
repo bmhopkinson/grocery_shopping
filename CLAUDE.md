@@ -68,12 +68,14 @@ frontend/src/
     CuisineInput.jsx      # Input form for cuisine type or recipe URL
     MealSelection.jsx     # Recipe selection UI
     IngredientReview.jsx  # Ingredient modification UI
-    RemindersPrompt.jsx   # Confirm adding to Reminders
+    RemindersPrompt.jsx   # Select/create a working list to receive meal planner items
     CompletionScreen.jsx  # Success screen after adding groceries
     StatusDisplay.jsx     # Streaming status messages
-    UsualsList.jsx        # Manage usual grocery items
-    ReorderReminders.jsx  # Trigger LLM reorder of a Reminders list
-    AddToRemindersDialog.jsx  # Dialog for selecting target list
+    UsualsList.jsx        # Manage usual grocery items (add to working lists)
+    ReorderReminders.jsx  # Trigger LLM reorder of an existing Reminders list
+    AddToWorkingListDialog.jsx  # Dialog for selecting/creating a working list
+    WorkingLists.jsx      # Grid of all working lists (create/delete)
+    WorkingListDetail.jsx # Items in a list; organize by store, send to Reminders
     SourceManager.jsx     # Manage preferred recipe sources
     BotanicalBanner.jsx   # Decorative header banner
     PageShell.jsx         # Shared page layout wrapper
@@ -117,8 +119,9 @@ Required in `.env`:
 3. **Interrupt**: User selects a recipe
 4. LLM extracts ingredients from recipe HTML
 5. **Interrupt**: User reviews/modifies ingredients
-6. Smart collation with existing reminders
-7. Items added to Apple Reminders "Groceries" list
+6. **Interrupt**: User picks or creates a working list
+7. Smart collation with existing working list items; items saved
+8. From "My Lists" page: organize by store layout and/or send to Apple Reminders
 
 ## Development Notes
 

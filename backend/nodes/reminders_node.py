@@ -1,125 +1,121 @@
 """
-Apple Reminders integration node.
+Working list integration node.
 
-Handles adding ingredients to Apple Reminders lists with smart collation.
+Handles adding extracted ingredients to a working list (internal shopping list)
+with smart collation of existing items.
 """
 
 from langgraph.types import interrupt
 
 from models import MealPlannerState, Ingredient
-from reminders import (
-    create_reminder,
-    list_exists,
-    create_list,
-    get_all_lists,
-    get_reminders,
-    delete_reminders_batch,
-)
 from collate import collate_ingredients
 import ui
 
 
-def format_reminder_item(item: Ingredient) -> str:
-    """Format an ingredient as a reminder item text."""
+def format_item_text(item: Ingredient) -> str:
     if item.unit:
         return f"{item.name} ({item.amount} {item.unit})"
     return f"{item.name} ({item.amount})"
 
 
-def add_to_reminders(state: MealPlannerState) -> dict:
+async def add_to_working_list(state: MealPlannerState) -> dict:
     """
-    Present final grocery list for approval and add to Apple Reminders.
+    Present final grocery list for approval and add to a working list.
 
-    Handles list selection (existing or new), smart collation with
-    existing items, and batch operations for efficiency.
+    Interrupts to let the user pick or create a working list, then
+    collates new ingredients with existing items in that list.
 
     Reads: grocery_list
     Writes: reminders_added
     """
-    ingredients = state.get("grocery_list", [])
+    from database import get_session
+    from working_list import get_lists, create_list, get_list_items, add_items, update_item
 
+    ingredients = state.get("grocery_list", [])
     if not ingredients:
         ui.show_no_ingredients_for_reminders()
         return {"reminders_added": False}
 
-    # Build item list for frontend display
     items_for_display = [
         {"name": item.name, "amount": item.amount, "unit": item.unit or ""}
         for item in ingredients
     ]
 
-    # Get existing reminder lists
-    existing_lists = get_all_lists()
+    async with get_session() as session:
+        existing_lists = await get_lists(session)
 
     list_input = interrupt(value={
-        "existing_lists": existing_lists,
+        "working_lists": [{"id": l["id"], "name": l["name"]} for l in existing_lists],
         "items": items_for_display,
-        "instruction": "Enter list number, new list name, or 'skip'"
+        "instruction": "Select a shopping list or create a new one",
     })
 
-    ui.show_user_input(list_input)
-
-    list_input_str = str(list_input).strip()
-
-    if list_input_str.lower() in ("skip", "no", "cancel", ""):
+    # Handle skip
+    if isinstance(list_input, str) and list_input.strip().lower() in ("skip", "no", "cancel", ""):
         ui.show_skipping_reminders()
         return {"reminders_added": False}
 
-    # Determine list name
-    if list_input_str.isdigit():
-        idx = int(list_input_str) - 1
-        if 0 <= idx < len(existing_lists):
-            list_name = existing_lists[idx]
-        else:
-            list_name = list_input_str  # Use as literal name if out of range
-    else:
-        list_name = list_input_str
+    # Determine target list
+    list_id = None
+    list_name = None
 
-    # Ensure list exists
-    is_new_list = not list_exists(list_name)
-    if is_new_list:
-        ui.show_creating_list(list_name)
-        if not create_list(list_name):
-            ui.show_list_creation_failed(list_name)
+    if isinstance(list_input, dict):
+        action = list_input.get("action")
+        if action == "select":
+            list_id = list_input.get("list_id")
+        elif action == "create":
+            list_name = list_input.get("list_name", "").strip()
+    elif isinstance(list_input, str):
+        list_name = list_input.strip()
+
+    async with get_session() as session:
+        if list_id is None and list_name:
+            new_list = await create_list(session, list_name)
+            list_id = new_list["id"]
+
+        if list_id is None:
             return {"reminders_added": False}
 
-    # Read existing items and collate with new ingredients
-    existing_items = [] if is_new_list else get_reminders(list_name)
-    items_to_add, items_to_update = collate_ingredients(existing_items, ingredients)
+        # Load existing items and build text lookup for collation
+        existing_items = await get_list_items(session, list_id)
+        existing_texts = []
+        item_id_by_text: dict[str, str] = {}
+        for item in existing_items:
+            text = format_item_text(Ingredient(
+                name=item["name"],
+                amount=item["amount"] or "",
+                unit=item["unit"] or "",
+            ))
+            existing_texts.append(text)
+            item_id_by_text[text] = item["id"]
 
-    success_count = 0
-    updated_count = 0
-    failed_items = []
+        items_to_add, items_to_update = collate_ingredients(existing_texts, ingredients)
 
-    total_items = len(items_to_add) + len(items_to_update)
-    ui.show_adding_items(total_items, list_name, updated=len(items_to_update))
+        # Apply combined updates
+        for old_text, combined in items_to_update:
+            item_id = item_id_by_text.get(old_text)
+            if item_id:
+                await update_item(session, item_id, combined.name, combined.amount, combined.unit or "")
 
-    # Handle updates: batch delete old items first, then add combined
-    if items_to_update:
-        old_texts = [old_text for old_text, _ in items_to_update]
-        delete_reminders_batch(list_name, old_texts)
+        # Add new items
+        if items_to_add:
+            await add_items(session, list_id, [
+                {"name": i.name, "amount": i.amount, "unit": i.unit or ""}
+                for i in items_to_add
+            ])
 
-    # Add combined reminders for updated items
-    for old_text, combined in items_to_update:
-        item_text = format_reminder_item(combined)
-        if create_reminder(list_name, item_text):
-            updated_count += 1
-        else:
-            failed_items.append(item_text)
-
-    # Add new items
-    for item in items_to_add:
-        item_text = format_reminder_item(item)
-        if create_reminder(list_name, item_text):
-            success_count += 1
-        else:
-            failed_items.append(item_text)
-
+    total = len(items_to_add) + len(items_to_update)
     ui.show_items_added(
-        success_count,
         len(items_to_add),
-        failed_items if failed_items else None,
-        updated=updated_count
+        total,
+        None,
+        updated=len(items_to_update),
     )
 
     return {"reminders_added": True}
+
+
+# Keep legacy function name for any CLI usage
+def add_to_reminders(state: MealPlannerState) -> dict:
+    import asyncio
+    return asyncio.run(add_to_working_list(state))
