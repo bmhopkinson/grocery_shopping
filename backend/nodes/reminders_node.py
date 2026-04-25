@@ -13,9 +13,11 @@ import ui
 
 
 def format_item_text(item: Ingredient) -> str:
-    if item.unit:
+    if item.amount and item.unit:
         return f"{item.name} ({item.amount} {item.unit})"
-    return f"{item.name} ({item.amount})"
+    if item.amount:
+        return f"{item.name} ({item.amount})"
+    return item.name
 
 
 async def add_to_working_list(state: MealPlannerState) -> dict:

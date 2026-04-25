@@ -553,9 +553,11 @@ async def dump_working_list_to_reminders(list_id: str, request: WorkingListDumpR
         await asyncio.to_thread(reminders_client.delete_reminders_batch, list_name, old_texts)
 
     def _fmt(item: Ingredient) -> str:
-        if item.unit:
+        if item.amount and item.unit:
             return f"{item.name} ({item.amount} {item.unit})"
-        return f"{item.name} ({item.amount})"
+        if item.amount:
+            return f"{item.name} ({item.amount})"
+        return item.name
 
     added, failed = [], []
     for _, combined in items_to_update:
