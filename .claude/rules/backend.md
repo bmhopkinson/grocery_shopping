@@ -1,6 +1,6 @@
 ---
 paths:
-  - "src/**/*"
+  - "backend/**/*"
 ---
 
 # Backend Reference

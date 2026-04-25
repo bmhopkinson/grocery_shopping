@@ -27,10 +27,10 @@ cd frontend && npm run dev  # Terminal 3: frontend
 ```
 .claude/
   rules/
-    backend.md            # Backend API reference (loads for src/**)
+    backend.md            # Backend API reference (loads for backend/**)
     frontend.md           # Frontend reference (loads for frontend/**)
 
-src/
+backend/
   meal_planner.py         # Main orchestrator, LangGraph workflow builder
   meal_planner_server.py  # FastAPI server with SSE streaming
   models.py               # Pydantic data models (Recipe, Ingredient, MealPlannerState)
@@ -40,6 +40,7 @@ src/
   eventkit_store.py       # Direct PyObjC EventKit access
   collate.py              # Smart ingredient merging logic
   usuals.py               # Usual grocery items management
+  weekly_planner.py       # Weekly meal planner data layer (CRUD, JSON fallback)
   ui.py                   # CLI output formatting
 
   nodes/                  # Graph node implementations
@@ -76,6 +77,7 @@ frontend/src/
     SourceManager.jsx     # Manage preferred recipe sources
     BotanicalBanner.jsx   # Decorative header banner
     PageShell.jsx         # Shared page layout wrapper
+    WeeklyPlanner.jsx     # Weekly meal planner (accordion by week, full CRUD)
 
   hooks/
     useMealPlanSession.js # SSE session management hook
@@ -130,6 +132,6 @@ Required in `.env`:
 
 ```bash
 # In Docker container
-python -m pytest src/test_meal_planner_server.py
+python -m pytest backend/test_meal_planner_server.py
 ```
 

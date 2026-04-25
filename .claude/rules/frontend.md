@@ -7,7 +7,7 @@ paths:
 
 ## App Modes (`App.jsx`)
 
-`mode` state: `home` | `meal_plan` | `usuals` | `reorder`
+`mode` state: `home` | `meal_plan` | `usuals` | `reorder` | `weekly_planner`
 
 ## Components
 
@@ -22,6 +22,7 @@ paths:
 | `HomeScreen` | Landing/home view |
 | `UsualsList` | Manage usual grocery items |
 | `ReorderReminders` | Trigger LLM reorder of a Reminders list |
+| `WeeklyPlanner` | Weekly meal planner with accordion view by week |
 
 ## SSE Event Handling
 

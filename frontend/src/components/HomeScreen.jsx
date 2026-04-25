@@ -2,6 +2,7 @@ import { Box, Typography, Card, CardActionArea, CardContent, Grid } from '@mui/m
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import SortIcon from '@mui/icons-material/Sort'
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 
 export default function HomeScreen({ onSelect }) {
   return (
@@ -47,6 +48,19 @@ export default function HomeScreen({ onSelect }) {
                 <Typography variant="h6">Organize List</Typography>
                 <Typography variant="body2" color="text.secondary" align="center">
                   Reorder a Reminders list by grocery store layout
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card elevation={2}>
+            <CardActionArea onClick={() => onSelect('weekly_planner')} sx={{ py: 3 }}>
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                <CalendarMonthIcon sx={{ fontSize: 52, color: 'warning.main' }} />
+                <Typography variant="h6">Weekly Planner</Typography>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  Plan meals for each day of the week
                 </Typography>
               </CardContent>
             </CardActionArea>

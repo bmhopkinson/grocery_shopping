@@ -118,7 +118,7 @@ Vite proxies all `/api` requests to `http://localhost:8000`, so the frontend nev
 
 ### FastAPI Server (`meal_planner_server`)
 
-**`src/meal_planner_server.py`**
+**`backend/meal_planner_server.py`**
 
 This is the HTTP boundary of the system. It translates between the browser's request/response model and the LangGraph event stream, while also managing session state.
 
@@ -148,7 +148,7 @@ Both `/plan` and `/resume` return a `EventSourceResponse` from `sse-starlette`. 
 
 #### Interrupt Detection
 
-When LangGraph hits an `interrupt()` call inside a node, `astream_events` surfaces it as a special event type. The server uses the **interrupt registry** (`src/server/interrupts.py`) to inspect the interrupt's payload and decide which SSE event to emit:
+When LangGraph hits an `interrupt()` call inside a node, `astream_events` surfaces it as a special event type. The server uses the **interrupt registry** (`backend/server/interrupts.py`) to inspect the interrupt's payload and decide which SSE event to emit:
 
 ```
 Interrupt payload contains "existing_lists"  →  reminders_prompt
@@ -176,7 +176,7 @@ This pattern means the server never needs to know about specific node names — 
 
 ### LangGraph Workflow (`meal_planner`)
 
-**`src/meal_planner.py`** and **`src/nodes/`**
+**`backend/meal_planner.py`** and **`backend/nodes/`**
 
 The core AI workflow. It is a directed graph where each node is a Python function, edges are conditional routing functions, and human input is handled via `interrupt()` calls that pause execution until the server resumes them.
 
@@ -207,7 +207,7 @@ process_meal subgraph:
 
 #### Nodes
 
-**Search nodes** (`src/nodes/search.py`)
+**Search nodes** (`backend/nodes/search.py`)
 
 | Node | What it does |
 |---|---|
@@ -216,7 +216,7 @@ process_meal subgraph:
 | `validate_recipes` | Filters out aggregator/collection URLs; sets `refine_dishes` if fewer than 3 valid recipes found |
 | `refine_search` | Re-searches for specific dish names and merges results, deduplicating by URL |
 
-**Processing nodes** (`src/nodes/processing.py`)
+**Processing nodes** (`backend/nodes/processing.py`)
 
 | Node | What it does |
 |---|---|
@@ -225,20 +225,20 @@ process_meal subgraph:
 | `extract_ingredients` | Fetches the recipe HTML; tries JSON-LD structured data first, falls back to plain text; LLM extracts a structured ingredient list |
 | `review_ingredients` | Emits the ingredient review interrupt; supports checkbox JSON or freeform `"remove X, Y"` commands |
 
-**Reminders node** (`src/nodes/reminders_node.py`)
+**Reminders node** (`backend/nodes/reminders_node.py`)
 
 | Node | What it does |
 |---|---|
 | `add_to_reminders` | Reads the user's existing Reminders list; runs smart collation; batch-deletes outdated items; adds new/combined items; supports skip and new-list creation |
 
-**Routing functions** (`src/nodes/routing.py`)
+**Routing functions** (`backend/nodes/routing.py`)
 
 | Function | Decision |
 |---|---|
 | `route_by_input` | `direct_url` present → `create_meal_from_url`; else → `search_meals` |
 | `should_refine` | `refine_dishes` set → `refine_search`; else → `present_options` |
 
-#### HTML Extraction (`src/nodes/html_utils.py`)
+#### HTML Extraction (`backend/nodes/html_utils.py`)
 
 Recipe pages are parsed in two passes:
 
@@ -247,13 +247,13 @@ Recipe pages are parsed in two passes:
 
 #### LLM Usage
 
-All LLM calls use **structured output** via `with_structured_output(PydanticModel)`. This guarantees the LLM returns parseable JSON conforming to a schema, rather than free-form text. Prompt templates live in `src/prompts.py`. The LLM singleton is initialised once in `src/nodes/base.py` and reused across all nodes.
+All LLM calls use **structured output** via `with_structured_output(PydanticModel)`. This guarantees the LLM returns parseable JSON conforming to a schema, rather than free-form text. Prompt templates live in `backend/prompts.py`. The LLM singleton is initialised once in `backend/nodes/base.py` and reused across all nodes.
 
 ---
 
 ### Reminders Proxy (`reminders_server`)
 
-**`src/reminders_server.py`** and **`src/reminders.py`**
+**`backend/reminders_server.py`** and **`backend/reminders.py`**
 
 macOS Reminders can only be accessed via AppleScript, which requires running `osascript` on the Mac host. Because the FastAPI server runs inside a Docker container, it cannot call `osascript` directly.
 
@@ -280,7 +280,7 @@ The proxy also batches delete operations into a single AppleScript call. Issuing
 
 #### reminders.py Abstraction
 
-`src/reminders.py` provides a single API to the rest of the application regardless of execution mode:
+`backend/reminders.py` provides a single API to the rest of the application regardless of execution mode:
 
 - If `REMINDERS_PROXY_URL` is set → delegates to the HTTP proxy
 - Otherwise → calls `osascript` directly (local dev without Docker)
@@ -391,13 +391,13 @@ Every LLM call uses `with_structured_output(PydanticModel)`. This forces the mod
 
 ### Singleton services
 
-`src/nodes/base.py` initialises the LLM client, DuckDuckGo search tool, and HTTP client once and reuses them. This avoids repeatedly re-reading environment variables and re-establishing connections on every node invocation.
+`backend/nodes/base.py` initialises the LLM client, DuckDuckGo search tool, and HTTP client once and reuses them. This avoids repeatedly re-reading environment variables and re-establishing connections on every node invocation.
 
 ---
 
 ## Data Models
 
-Defined in `src/models.py`.
+Defined in `backend/models.py`.
 
 ### `MealPlannerState`
 
@@ -438,7 +438,7 @@ recipe_url:  str
 
 ## Ingredient Collation
 
-**`src/collate.py`**
+**`backend/collate.py`**
 
 Before writing to Reminders, the app reads the current contents of the target list and merges the new ingredients with what's already there. This prevents duplicate entries when planning multiple meals.
 
@@ -529,7 +529,7 @@ The Docker container also receives:
 ```
 grocery_shopping/
 │
-├── src/
+├── backend/
 │   ├── meal_planner.py         # LangGraph graph builder + checkpointer init
 │   ├── meal_planner_server.py  # FastAPI server: sessions, SSE, interrupt handling
 │   ├── reminders_server.py     # HTTP proxy: REST → AppleScript (runs on Mac host)
@@ -567,7 +567,7 @@ grocery_shopping/
 │           └── StatusDisplay.jsx
 │
 ├── docker/
-│   ├── Dockerfile              # python:3.11-slim, installs deps, mounts src/
+│   ├── Dockerfile              # python:3.11-slim, installs deps, mounts backend/
 │   └── docker-compose.yml      # meal-planner (port 8000) + postgres (port 5433)
 │
 ├── docs/

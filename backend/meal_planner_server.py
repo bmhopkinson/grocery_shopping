@@ -34,6 +34,7 @@ from sse_starlette.sse import EventSourceResponse
 import reminders as reminders_client
 from meal_planner import get_checkpointer_async, get_connection_pool
 from usuals import init_usuals_table, get_usuals, create_usual, update_usual, delete_usual
+from weekly_planner import init_weekly_planner_table, get_meals, create_meal, update_meal, delete_meal
 from server.sse import serialize_model, session_start_event
 from server.sessions import Session, sessions
 from server.graph_runner import stream_graph_execution
@@ -99,6 +100,21 @@ class ReorderRemindersRequest(BaseModel):
     list_name: str
 
 
+class MealCreateRequest(BaseModel):
+    name: str
+    day_of_week: int
+    week_start: str
+    notes: Optional[str] = None
+    url: Optional[str] = None
+
+
+class MealUpdateRequest(BaseModel):
+    name: str
+    day_of_week: int
+    notes: Optional[str] = None
+    url: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # FastAPI App
 # ---------------------------------------------------------------------------
@@ -117,6 +133,8 @@ async def lifespan(app: FastAPI):
     pool = get_connection_pool()
     await init_usuals_table(pool)
     logger.info("Usuals table ready")
+    await init_weekly_planner_table(pool)
+    logger.info("Weekly planner table ready")
     yield
     logger.info("FastAPI lifespan shutdown - clearing sessions...")
     sessions.clear()
@@ -321,6 +339,40 @@ async def delete_usual_endpoint(id: str):
     deleted = await delete_usual(pool, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Usual not found")
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Weekly planner routes
+# ---------------------------------------------------------------------------
+
+@app.get("/weekly-meals")
+async def list_weekly_meals():
+    pool = get_connection_pool()
+    return await get_meals(pool)
+
+
+@app.post("/weekly-meals")
+async def create_weekly_meal(request: MealCreateRequest):
+    pool = get_connection_pool()
+    return await create_meal(pool, request.name, request.day_of_week, request.week_start, request.notes, request.url)
+
+
+@app.put("/weekly-meals/{id}")
+async def update_weekly_meal(id: str, request: MealUpdateRequest):
+    pool = get_connection_pool()
+    item = await update_meal(pool, id, request.name, request.day_of_week, request.notes, request.url)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return item
+
+
+@app.delete("/weekly-meals/{id}")
+async def delete_weekly_meal(id: str):
+    pool = get_connection_pool()
+    deleted = await delete_meal(pool, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Meal not found")
     return {"deleted": True}
 
 

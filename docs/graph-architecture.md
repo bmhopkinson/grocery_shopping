@@ -366,7 +366,7 @@ Current error points:
 
 ## Code Organization
 
-### Node Modules (`src/nodes/`)
+### Node Modules (`backend/nodes/`)
 
 | Module | Functions | Description |
 |--------|-----------|-------------|
@@ -377,7 +377,7 @@ Current error points:
 | `processing.py` | `create_meal_from_url()`, `present_options()`, `extract_ingredients()`, `review_ingredients()` | Processing & interrupt nodes |
 | `reminders_node.py` | `add_to_reminders()` | Apple Reminders integration |
 
-### Server Modules (`src/server/`)
+### Server Modules (`backend/server/`)
 
 | Module | Components | Description |
 |--------|------------|-------------|

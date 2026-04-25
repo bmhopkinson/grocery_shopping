@@ -15,10 +15,10 @@ help:
 	@echo "  1. make proxy        (in one terminal)"
 	@echo "  2. make docker-up    (in another terminal)"
 	@echo "  3. make docker-shell"
-	@echo "  4. python src/meal_planner.py"
+	@echo "  4. python backend/meal_planner.py"
 
 proxy:
-	cd src && python3 reminders_server.py
+	cd backend && python3 reminders_server.py
 
 docker-build:
 	cd docker && docker compose --env-file ../.env build
@@ -33,11 +33,11 @@ docker-shell:
 	docker exec -it meal-planner bash
 
 run-local:
-	python3 src/meal_planner.py
+	python3 backend/meal_planner.py
 
 start-all: docker-build
 	@echo "Starting proxy server in background..."
-	cd src && nohup python3 reminders_server.py > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
+	cd backend && nohup python3 reminders_server.py > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
 	@sleep 1
 	@echo "Starting Docker containers..."
 	cd docker && docker compose --env-file ../.env up -d

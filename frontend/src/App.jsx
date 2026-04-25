@@ -8,6 +8,7 @@ import StatusDisplay from './components/StatusDisplay'
 import HomeScreen from './components/HomeScreen'
 import UsualsList from './components/UsualsList'
 import ReorderReminders from './components/ReorderReminders'
+import WeeklyPlanner from './components/WeeklyPlanner'
 import PageShell from './components/PageShell'
 import BotanicalBanner from './components/BotanicalBanner'
 import { useMealPlanSession } from './hooks/useMealPlanSession'
@@ -69,6 +70,16 @@ export default function App() {
       <AppLayout>
         <PageShell onBack={goHome} header={<Typography variant="h6">Organize List</Typography>}>
           <ReorderReminders />
+        </PageShell>
+      </AppLayout>
+    )
+  }
+
+  if (mode === 'weekly_planner') {
+    return (
+      <AppLayout>
+        <PageShell onBack={goHome} header={<Typography variant="h6">Weekly Planner</Typography>}>
+          <WeeklyPlanner />
         </PageShell>
       </AppLayout>
     )
