@@ -32,9 +32,10 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import reminders as reminders_client
-from meal_planner import get_checkpointer_async, get_connection_pool
-from usuals import init_usuals_table, get_usuals, create_usual, update_usual, delete_usual
-from weekly_planner import init_weekly_planner_table, get_meals, create_meal, update_meal, delete_meal
+from meal_planner import get_checkpointer_async
+from usuals import get_usuals, create_usual, update_usual, delete_usual
+from weekly_planner import get_meals, create_meal, update_meal, delete_meal
+from database import init_engine, close_engine, get_session
 from server.sse import serialize_model, session_start_event
 from server.sessions import Session, sessions
 from server.graph_runner import stream_graph_execution
@@ -130,12 +131,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception(f"Failed to initialize checkpointer: {e}")
         raise
-    pool = get_connection_pool()
-    await init_usuals_table(pool)
-    logger.info("Usuals table ready")
-    await init_weekly_planner_table(pool)
-    logger.info("Weekly planner table ready")
+    await init_engine()
+    logger.info("SQLAlchemy engine and tables ready")
     yield
+    await close_engine()
     logger.info("FastAPI lifespan shutdown - clearing sessions...")
     sessions.clear()
 
@@ -291,14 +290,14 @@ async def reorder_reminders(request: ReorderRemindersRequest):
 
 @app.get("/usuals")
 async def list_usuals():
-    pool = get_connection_pool()
-    return await get_usuals(pool)
+    async with get_session() as session:
+        return await get_usuals(session)
 
 
 @app.post("/usuals/add-to-reminders")
 async def add_usuals_to_reminders(request: AddUsualsToRemindersRequest):
-    pool = get_connection_pool()
-    all_usuals = await get_usuals(pool)
+    async with get_session() as session:
+        all_usuals = await get_usuals(session)
     id_set = set(request.usual_ids)
     selected = [u for u in all_usuals if u["id"] in id_set]
 
@@ -320,14 +319,14 @@ async def add_usuals_to_reminders(request: AddUsualsToRemindersRequest):
 
 @app.post("/usuals")
 async def create_usual_endpoint(request: UsualCreateRequest):
-    pool = get_connection_pool()
-    return await create_usual(pool, request.name, request.category)
+    async with get_session() as session:
+        return await create_usual(session, request.name, request.category)
 
 
 @app.put("/usuals/{id}")
 async def update_usual_endpoint(id: str, request: UsualUpdateRequest):
-    pool = get_connection_pool()
-    item = await update_usual(pool, id, request.name, request.category)
+    async with get_session() as session:
+        item = await update_usual(session, id, request.name, request.category)
     if item is None:
         raise HTTPException(status_code=404, detail="Usual not found")
     return item
@@ -335,8 +334,8 @@ async def update_usual_endpoint(id: str, request: UsualUpdateRequest):
 
 @app.delete("/usuals/{id}")
 async def delete_usual_endpoint(id: str):
-    pool = get_connection_pool()
-    deleted = await delete_usual(pool, id)
+    async with get_session() as session:
+        deleted = await delete_usual(session, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Usual not found")
     return {"deleted": True}
@@ -348,20 +347,20 @@ async def delete_usual_endpoint(id: str):
 
 @app.get("/weekly-meals")
 async def list_weekly_meals():
-    pool = get_connection_pool()
-    return await get_meals(pool)
+    async with get_session() as session:
+        return await get_meals(session)
 
 
 @app.post("/weekly-meals")
 async def create_weekly_meal(request: MealCreateRequest):
-    pool = get_connection_pool()
-    return await create_meal(pool, request.name, request.day_of_week, request.week_start, request.notes, request.url)
+    async with get_session() as session:
+        return await create_meal(session, request.name, request.day_of_week, request.week_start, request.notes, request.url)
 
 
 @app.put("/weekly-meals/{id}")
 async def update_weekly_meal(id: str, request: MealUpdateRequest):
-    pool = get_connection_pool()
-    item = await update_meal(pool, id, request.name, request.day_of_week, request.notes, request.url)
+    async with get_session() as session:
+        item = await update_meal(session, id, request.name, request.day_of_week, request.notes, request.url)
     if item is None:
         raise HTTPException(status_code=404, detail="Meal not found")
     return item
@@ -369,8 +368,8 @@ async def update_weekly_meal(id: str, request: MealUpdateRequest):
 
 @app.delete("/weekly-meals/{id}")
 async def delete_weekly_meal(id: str):
-    pool = get_connection_pool()
-    deleted = await delete_meal(pool, id)
+    async with get_session() as session:
+        deleted = await delete_meal(session, id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"deleted": True}

@@ -13,4 +13,5 @@ uvicorn
 sse-starlette
 ddgs
 psycopg[binary,pool]>=3.1.0
+sqlalchemy[asyncio]>=2.0
 pyobjc-framework-EventKit; sys_platform == 'darwin'
