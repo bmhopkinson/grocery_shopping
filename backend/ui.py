@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from models import MealOption, Ingredient
+from agent.models import MealOption, Ingredient
 
 # Configuration from environment
 CLI_MODE = os.getenv("CLI_MODE", "true").lower() == "true"

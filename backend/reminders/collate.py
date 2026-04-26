@@ -8,7 +8,7 @@ import re
 from fractions import Fraction
 from typing import Optional
 
-from models import Ingredient
+from agent.models import Ingredient
 
 
 def normalize_name(name: str) -> str:

@@ -4,7 +4,7 @@ Routing functions for conditional graph edges.
 These functions determine which path the graph takes based on state.
 """
 
-from models import MealPlannerState
+from agent.models import MealPlannerState
 
 
 def should_refine(state: MealPlannerState) -> str:

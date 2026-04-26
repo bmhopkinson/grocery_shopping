@@ -2,7 +2,7 @@
 FastAPI server for Apple Reminders proxy.
 
 Run this on the Mac host to allow Docker containers to create reminders.
-Usage: python reminders_server.py
+Usage: python -m reminders.server
 """
 
 import os
@@ -13,12 +13,12 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from eventkit_store import _store
+from reminders.eventkit_store import _store
 
 load_dotenv()
 
 # --- File logging setup ---
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE = LOG_DIR / "reminders_proxy.log"
 

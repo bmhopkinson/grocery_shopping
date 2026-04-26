@@ -11,14 +11,14 @@ import logging
 from bs4 import BeautifulSoup
 from langgraph.types import interrupt
 
-from models import (
+from agent.models import (
     MealPlannerState,
     MealOption,
     ExtractedIngredients,
 )
-from prompts import get_extract_ingredients_prompt
-from nodes.base import create_http_client, invoke_structured
-from nodes.html_utils import extract_json_ld_recipe, extract_text_content
+from agent.prompts import get_extract_ingredients_prompt
+from agent.nodes.base import create_http_client, invoke_structured
+from agent.nodes.html_utils import extract_json_ld_recipe, extract_text_content
 import ui
 
 

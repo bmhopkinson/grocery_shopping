@@ -9,8 +9,8 @@ from fastapi import HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-import reminders as reminders_client
-from nodes.base import get_llm
+import reminders.client as reminders_client
+from agent.nodes.base import get_llm
 
 
 logger = logging.getLogger(__name__)

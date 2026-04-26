@@ -34,6 +34,18 @@ Dual mode: uses `REMINDERS_PROXY_URL` env var (HTTP to proxy) or direct PyObjC E
 
 ## Meal Planner API (`meal_planner_server.py`) — port 8000
 
+Routes are split into `backend/api/` subdirectories by family:
+- `api/planning/` → `/plan`, `/sessions/*`
+- `api/reminders/` → `/reminder-lists`, `/reorder-reminders`
+- `api/usuals/` → `/usuals/*`
+- `api/lists/` → `/working-lists/*`
+- `api/recipes/` → `/recipes/*`
+- `api/weekly/` → `/weekly-meals/*`
+
+Each subdirectory has `router.py` (APIRouter) and `models.py` (Pydantic request models).
+`meal_planner_server.py` handles app setup, lifespan, middleware, and includes all routers.
+Checkpointer is stored on `app.state.checkpointer` (set during lifespan startup).
+
 | Method | Path | Notes |
 |--------|------|-------|
 | POST | `/plan` | SSE stream; body: `{cuisine_type, direct_url, preferred_sources}` |
@@ -47,6 +59,30 @@ Dual mode: uses `REMINDERS_PROXY_URL` env var (HTTP to proxy) or direct PyObjC E
 | PUT | `/usuals/{id}` | `{name, category?}` |
 | DELETE | `/usuals/{id}` | — |
 | POST | `/usuals/add-to-reminders` | `{usual_ids: [str], list_name}` |
+| POST | `/usuals/add-to-working-list` | `{usual_ids: [str], working_list_id}` |
+| GET | `/working-lists` | — |
+| POST | `/working-lists` | `{name}` |
+| DELETE | `/working-lists/{id}` | — |
+| GET | `/working-lists/{id}/items` | — |
+| POST | `/working-lists/{id}/items` | `{name, amount?, unit?}` |
+| PUT | `/working-lists/{id}/items/{item_id}` | `{name, amount?, unit?}` |
+| DELETE | `/working-lists/{id}/items/{item_id}` | — |
+| DELETE | `/working-lists/{id}/items` | Clear all items |
+| POST | `/working-lists/{id}/reorder` | LLM store-section reorder; body: `{item_ids: [str]}` |
+| POST | `/working-lists/{id}/dump-to-reminders` | Export to Apple Reminders with collation; body: `{list_name}` |
+| GET | `/recipes` | — |
+| POST | `/recipes` | `{name, url?, notes?, instructions: []}` |
+| GET | `/recipes/{id}` | Includes ingredients |
+| PUT | `/recipes/{id}` | `{name, url?, notes?, instructions: []}` |
+| DELETE | `/recipes/{id}` | — |
+| GET | `/recipes/{id}/ingredients` | — |
+| POST | `/recipes/{id}/ingredients` | `{name, amount?, unit?}` |
+| PUT | `/recipes/{id}/ingredients/{ing_id}` | `{name, amount?, unit?}` |
+| DELETE | `/recipes/{id}/ingredients/{ing_id}` | — |
+| GET | `/weekly-meals` | — |
+| POST | `/weekly-meals` | `{name, day_of_week, week_start, notes?, url?}` |
+| PUT | `/weekly-meals/{id}` | `{name, day_of_week, notes?, url?}` |
+| DELETE | `/weekly-meals/{id}` | — |
 | GET | `/health` | `{status, active_sessions}` |
 
 ## SSE Event Types (from `/plan` and `/sessions/{id}/resume`)
@@ -76,4 +112,4 @@ Use `await llm.ainvoke([HumanMessage(content=prompt)])` for async calls in serve
 ## Store Section Order (for reorder feature)
 
 `produce → meat → canned and dry goods → snacks → dairy → frozen → beer and wine → paper items`
-Defined as `STORE_SECTION_ORDER` list in `meal_planner_server.py`.
+Defined as `STORE_SECTION_ORDER` list in `server/reorder.py`.

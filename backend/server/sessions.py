@@ -2,7 +2,7 @@
 Session management for active meal planning sessions.
 """
 
-from meal_planner import build_meal_planner_graph
+from agent.meal_planner import build_meal_planner_graph
 
 
 class Session:

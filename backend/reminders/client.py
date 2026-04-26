@@ -21,7 +21,7 @@ def _use_proxy() -> bool:
 
 def _get_store():
     """Lazily import and return the module-level EventKit store singleton."""
-    from eventkit_store import _store
+    from reminders.eventkit_store import _store
     return _store
 
 

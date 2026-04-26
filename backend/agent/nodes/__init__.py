@@ -10,29 +10,26 @@ This package contains all node functions organized by workflow stage:
 All node functions are re-exported here for backward compatibility.
 """
 
-# Re-export all nodes for backward compatibility with:
-#   from nodes import search_meals, parse_meals, ...
-
-from nodes.routing import (
+from agent.nodes.routing import (
     should_refine,
     route_by_input,
 )
 
-from nodes.search import (
+from agent.nodes.search import (
     search_meals,
     parse_meals,
     validate_recipes,
     refine_search,
 )
 
-from nodes.processing import (
+from agent.nodes.processing import (
     create_meal_from_url,
     present_options,
     extract_ingredients,
     review_ingredients,
 )
 
-from nodes.reminders_node import (
+from agent.nodes.reminders_node import (
     add_to_working_list,
 )
 

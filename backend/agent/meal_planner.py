@@ -16,11 +16,11 @@ import os
 import sys
 from pathlib import Path
 
-# Add src directory to Python path for absolute imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Add backend directory to Python path for absolute imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import Command
@@ -28,14 +28,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg_pool import AsyncConnectionPool
 
-from models import MealPlannerState
+from agent.models import MealPlannerState
 
 # Register custom Pydantic types so the Postgres msgpack checkpointer can
 # deserialize them without warnings.  The attribute name changed across
 # LangGraph patch releases, so we try a couple of known locations.
 try:
     from langgraph.checkpoint.serde.msgpack import allowed_msgpack_modules as _amm
-    for _entry in [('models', 'MealOption'), ('models', 'Ingredient')]:
+    for _entry in [('agent.models', 'MealOption'), ('agent.models', 'Ingredient')]:
         _amm.add(_entry)
 except Exception:
     pass
@@ -108,7 +108,7 @@ def get_connection_pool() -> AsyncConnectionPool | None:
     return _connection_pool
 
 
-from nodes import (
+from agent.nodes import (
     search_meals,
     parse_meals,
     validate_recipes,

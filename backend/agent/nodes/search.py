@@ -10,21 +10,21 @@ from typing import List
 
 from langchain_core.messages import AIMessage
 
-from models import (
+from agent.models import (
     MealPlannerState,
     MealOption,
     ParsedRecipes,
     ValidationResult,
     DishNames,
 )
-from prompts import (
+from agent.prompts import (
     get_parse_recipes_prompt,
     get_validate_recipes_prompt,
     get_dish_names_prompt,
     get_refine_search_prompt,
     get_refine_search_query,
 )
-from nodes.base import get_llm, get_search_tool, invoke_structured
+from agent.nodes.base import get_llm, get_search_tool, invoke_structured
 import ui
 
 logger = logging.getLogger(__name__)

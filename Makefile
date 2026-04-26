@@ -15,10 +15,10 @@ help:
 	@echo "  1. make proxy        (in one terminal)"
 	@echo "  2. make docker-up    (in another terminal)"
 	@echo "  3. make docker-shell"
-	@echo "  4. python backend/meal_planner.py"
+	@echo "  4. python backend/agent/meal_planner.py"
 
 proxy:
-	cd backend && python3 reminders_server.py
+	cd backend && python3 -m reminders.server
 
 docker-build:
 	cd docker && docker compose --env-file ../.env build
@@ -37,7 +37,7 @@ run-local:
 
 start-all: docker-build
 	@echo "Starting proxy server in background..."
-	cd backend && nohup python3 reminders_server.py > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
+	cd backend && nohup python3 -m reminders.server > ../proxy.log 2>&1 & echo $$! > ../.proxy.pid
 	@sleep 1
 	@echo "Starting Docker containers..."
 	cd docker && docker compose --env-file ../.env up -d
@@ -48,5 +48,5 @@ stop-all:
 	-cd docker && docker compose --env-file ../.env down
 	@echo "Stopping proxy server..."
 	-@if [ -f .proxy.pid ]; then kill $$(cat .proxy.pid) 2>/dev/null; rm .proxy.pid; fi
-	-@pkill -f "python3 reminders_server.py" 2>/dev/null || true
+	-@pkill -f "reminders.server" 2>/dev/null || true
 	@echo "All services stopped."

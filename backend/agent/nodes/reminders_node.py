@@ -7,8 +7,8 @@ with smart collation of existing items.
 
 from langgraph.types import interrupt
 
-from models import MealPlannerState, Ingredient
-from collate import collate_ingredients
+from agent.models import MealPlannerState, Ingredient
+from reminders.collate import collate_ingredients
 import ui
 
 
@@ -31,7 +31,7 @@ async def add_to_working_list(state: MealPlannerState) -> dict:
     Writes: reminders_added
     """
     from database import get_session
-    from working_list import get_lists, create_list, get_list_items, add_items, update_item
+    from services.working_list import get_lists, create_list, get_list_items, add_items, update_item
 
     ingredients = state.get("grocery_list", [])
     if not ingredients:
