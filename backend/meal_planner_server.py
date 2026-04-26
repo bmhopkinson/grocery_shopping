@@ -36,6 +36,7 @@ from meal_planner import get_checkpointer_async
 from usuals import get_usuals, create_usual, update_usual, delete_usual
 from weekly_planner import get_meals, create_meal, update_meal, delete_meal
 import working_list as wl_crud
+import recipes as recipes_crud
 from database import init_engine, close_engine, get_session
 from server.sse import serialize_model, session_start_event
 from server.sessions import Session, sessions
@@ -144,6 +145,32 @@ class MealUpdateRequest(BaseModel):
     day_of_week: int
     notes: Optional[str] = None
     url: Optional[str] = None
+
+
+class RecipeCreateRequest(BaseModel):
+    name: str
+    url: Optional[str] = None
+    notes: Optional[str] = None
+    instructions: list[str] = []
+
+
+class RecipeUpdateRequest(BaseModel):
+    name: str
+    url: Optional[str] = None
+    notes: Optional[str] = None
+    instructions: list[str] = []
+
+
+class RecipeIngredientCreateRequest(BaseModel):
+    name: str
+    amount: str = ""
+    unit: str = ""
+
+
+class RecipeIngredientUpdateRequest(BaseModel):
+    name: str
+    amount: str = ""
+    unit: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +617,89 @@ async def add_usuals_to_working_list(request: AddUsualsToWorkingListRequest):
         )
     logger.info(f"add_usuals_to_working_list: added {len(created)} items to list {request.working_list_id!r}")
     return {"added": [i["name"] for i in created], "working_list_id": request.working_list_id}
+
+
+# ---------------------------------------------------------------------------
+# Recipes routes
+# ---------------------------------------------------------------------------
+
+@app.get("/recipes")
+async def list_recipes():
+    async with get_session() as session:
+        return await recipes_crud.get_recipes(session)
+
+
+@app.post("/recipes")
+async def create_recipe(request: RecipeCreateRequest):
+    async with get_session() as session:
+        return await recipes_crud.create_recipe(
+            session, request.name, request.url, request.notes, request.instructions
+        )
+
+
+@app.get("/recipes/{recipe_id}")
+async def get_recipe(recipe_id: str):
+    async with get_session() as session:
+        recipe = await recipes_crud.get_recipe(session, recipe_id)
+        if recipe is None:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+        ingredients = await recipes_crud.get_recipe_ingredients(session, recipe_id)
+    recipe["ingredients"] = ingredients
+    return recipe
+
+
+@app.put("/recipes/{recipe_id}")
+async def update_recipe(recipe_id: str, request: RecipeUpdateRequest):
+    async with get_session() as session:
+        recipe = await recipes_crud.update_recipe(
+            session, recipe_id, request.name, request.url, request.notes, request.instructions
+        )
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
+
+
+@app.delete("/recipes/{recipe_id}")
+async def delete_recipe(recipe_id: str):
+    async with get_session() as session:
+        deleted = await recipes_crud.delete_recipe(session, recipe_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return {"deleted": True}
+
+
+@app.get("/recipes/{recipe_id}/ingredients")
+async def list_recipe_ingredients(recipe_id: str):
+    async with get_session() as session:
+        return await recipes_crud.get_recipe_ingredients(session, recipe_id)
+
+
+@app.post("/recipes/{recipe_id}/ingredients")
+async def add_recipe_ingredient(recipe_id: str, request: RecipeIngredientCreateRequest):
+    async with get_session() as session:
+        return await recipes_crud.add_recipe_ingredient(
+            session, recipe_id, request.name, request.amount, request.unit
+        )
+
+
+@app.put("/recipes/{recipe_id}/ingredients/{ingredient_id}")
+async def update_recipe_ingredient(recipe_id: str, ingredient_id: str, request: RecipeIngredientUpdateRequest):
+    async with get_session() as session:
+        ingredient = await recipes_crud.update_recipe_ingredient(
+            session, ingredient_id, request.name, request.amount, request.unit
+        )
+    if ingredient is None:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    return ingredient
+
+
+@app.delete("/recipes/{recipe_id}/ingredients/{ingredient_id}")
+async def delete_recipe_ingredient(recipe_id: str, ingredient_id: str):
+    async with get_session() as session:
+        deleted = await recipes_crud.delete_recipe_ingredient(session, ingredient_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    return {"deleted": True}
 
 
 # ---------------------------------------------------------------------------

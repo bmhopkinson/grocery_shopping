@@ -15,16 +15,17 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import AddIcon from '@mui/icons-material/Add'
 import LinkIcon from '@mui/icons-material/Link'
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+const DAY_ABBR = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
 function getCurrentWeekStart() {
   const today = new Date()
+  // getDay(): 0=Sun,1=Mon,...,6=Sat. Saturday=6, so diff back to Saturday:
   const day = today.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diff)
-  return monday.toISOString().split('T')[0]
+  const diff = day === 6 ? 0 : -(day + 1)
+  const saturday = new Date(today)
+  saturday.setDate(today.getDate() + diff)
+  return saturday.toISOString().split('T')[0]
 }
 
 function weekLabel(weekStart) {

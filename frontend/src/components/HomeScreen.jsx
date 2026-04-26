@@ -2,8 +2,8 @@ import { Box, Typography, Card, CardActionArea, CardContent, Grid } from '@mui/m
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ListAltIcon from '@mui/icons-material/ListAlt'
-import SortIcon from '@mui/icons-material/Sort'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 
 export default function HomeScreen({ onSelect }) {
   return (
@@ -56,12 +56,12 @@ export default function HomeScreen({ onSelect }) {
         </Grid>
         <Grid item xs={12} sm={4}>
           <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('reorder')} sx={{ py: 3 }}>
+            <CardActionArea onClick={() => onSelect('weekly_planner')} sx={{ py: 3 }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
-                <SortIcon sx={{ fontSize: 52, color: 'success.main' }} />
-                <Typography variant="h6">Organize List</Typography>
+                <CalendarMonthIcon sx={{ fontSize: 52, color: 'warning.main' }} />
+                <Typography variant="h6">Weekly Planner</Typography>
                 <Typography variant="body2" color="text.secondary" align="center">
-                  Reorder a Reminders list by grocery store layout
+                  Plan meals for each day of the week
                 </Typography>
               </CardContent>
             </CardActionArea>
@@ -69,12 +69,12 @@ export default function HomeScreen({ onSelect }) {
         </Grid>
         <Grid item xs={12} sm={4}>
           <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('weekly_planner')} sx={{ py: 3 }}>
+            <CardActionArea onClick={() => onSelect('recipes')} sx={{ py: 3 }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
-                <CalendarMonthIcon sx={{ fontSize: 52, color: 'warning.main' }} />
-                <Typography variant="h6">Weekly Planner</Typography>
+                <MenuBookIcon sx={{ fontSize: 52, color: 'success.main' }} />
+                <Typography variant="h6">Recipes</Typography>
                 <Typography variant="body2" color="text.secondary" align="center">
-                  Plan meals for each day of the week
+                  Save and manage your favorite recipes
                 </Typography>
               </CardContent>
             </CardActionArea>

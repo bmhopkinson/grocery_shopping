@@ -10,6 +10,8 @@ import UsualsList from './components/UsualsList'
 import ReorderReminders from './components/ReorderReminders'
 import WeeklyPlanner from './components/WeeklyPlanner'
 import WorkingLists from './components/WorkingLists'
+import RecipesList from './components/RecipesList'
+import RecipeDetail from './components/RecipeDetail'
 import WorkingListDetail from './components/WorkingListDetail'
 import PageShell from './components/PageShell'
 import BotanicalBanner from './components/BotanicalBanner'
@@ -38,13 +40,14 @@ function AppLayout({ children }) {
 export default function App() {
   const [mode, setMode] = useState('home')
   const [selectedWorkingList, setSelectedWorkingList] = useState(null)
+  const [selectedRecipe, setSelectedRecipe] = useState(null)
   const {
     stage, loading, error, setError, statusMessages,
     mealOptions, ingredients, remindersData, completionData,
     startPlan, resumeSession, reset,
   } = useMealPlanSession()
 
-  const goHome = () => { reset(); setMode('home'); setSelectedWorkingList(null) }
+  const goHome = () => { reset(); setMode('home'); setSelectedWorkingList(null); setSelectedRecipe(null) }
 
   if (mode === 'home') {
     return (
@@ -100,6 +103,20 @@ export default function App() {
       <AppLayout>
         <PageShell onBack={goHome} header={<Typography variant="h6">Weekly Planner</Typography>}>
           <WeeklyPlanner />
+        </PageShell>
+      </AppLayout>
+    )
+  }
+
+  if (mode === 'recipes') {
+    return (
+      <AppLayout>
+        <PageShell onBack={selectedRecipe ? () => setSelectedRecipe(null) : goHome} header={<Typography variant="h6">{selectedRecipe ? selectedRecipe.name : 'Recipes'}</Typography>}>
+          {selectedRecipe ? (
+            <RecipeDetail recipeId={selectedRecipe.id} onBack={() => setSelectedRecipe(null)} />
+          ) : (
+            <RecipesList onSelectRecipe={setSelectedRecipe} />
+          )}
         </PageShell>
       </AppLayout>
     )
