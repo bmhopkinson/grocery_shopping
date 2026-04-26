@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Box, Grid, Card, CardActionArea, CardContent, CardActions,
+  Box, List, ListItem, ListItemButton, ListItemText, ListItemSecondaryAction,
   Typography, Button, TextField, Dialog, DialogTitle,
-  DialogContent, DialogActions, IconButton, CircularProgress, Alert,
+  DialogContent, DialogActions, IconButton, CircularProgress, Alert, Divider, Paper,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -54,7 +54,7 @@ export default function RecipesList({ onSelectRecipe }) {
     e.stopPropagation()
     if (!window.confirm(`Delete "${recipe.name}"?`)) return
     try {
-      await fetch(`${API_BASE}/recipes/${recipe.id}`, { method: 'DELETE' })
+      await fetch(`/api/recipes/${recipe.id}`, { method: 'DELETE' })
       setRecipes(prev => prev.filter(r => r.id !== recipe.id))
     } catch (e) {
       setError(e.message)
@@ -78,34 +78,29 @@ export default function RecipesList({ onSelectRecipe }) {
           No recipes yet. Add one to get started.
         </Typography>
       ) : (
-        <Grid container spacing={2}>
-          {recipes.map(recipe => (
-            <Grid item xs={12} sm={6} md={4} key={recipe.id}>
-              <Card elevation={2}>
-                <CardActionArea onClick={() => onSelectRecipe(recipe)}>
-                  <CardContent>
-                    <Typography variant="h6" noWrap>{recipe.name}</Typography>
-                    {recipe.url && (
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {recipe.url}
-                      </Typography>
-                    )}
-                    {recipe.notes && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }} noWrap>
-                        {recipe.notes}
-                      </Typography>
-                    )}
-                  </CardContent>
-                </CardActionArea>
-                <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                  <IconButton size="small" color="error" onClick={e => handleDelete(e, recipe)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        <Paper variant="outlined">
+          <List disablePadding>
+            {recipes.map((recipe, index) => (
+              <Box key={recipe.id}>
+                {index > 0 && <Divider />}
+                <ListItem disablePadding>
+                  <ListItemButton onClick={() => onSelectRecipe(recipe)}>
+                    <ListItemText
+                      primary={recipe.name}
+                      secondary={recipe.notes || recipe.url || undefined}
+                      secondaryTypographyProps={{ noWrap: true }}
+                    />
+                  </ListItemButton>
+                  <ListItemSecondaryAction>
+                    <IconButton size="small" color="error" onClick={e => handleDelete(e, recipe)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              </Box>
+            ))}
+          </List>
+        </Paper>
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>

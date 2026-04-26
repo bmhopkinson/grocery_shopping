@@ -16,8 +16,8 @@ export default function HomeScreen({ onSelect }) {
       </Typography>
       <Grid container spacing={3} justifyContent="center">
         <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('meal_plan')} sx={{ py: 3 }}>
+          <Card elevation={2} sx={{ height: 230 }}>
+            <CardActionArea onClick={() => onSelect('meal_plan')} sx={{ py: 3, height: '100%' }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
                 <RestaurantMenuIcon sx={{ fontSize: 52, color: 'primary.main' }} />
                 <Typography variant="h6">Plan Meals</Typography>
@@ -29,8 +29,8 @@ export default function HomeScreen({ onSelect }) {
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('usuals')} sx={{ py: 3 }}>
+          <Card elevation={2} sx={{ height: 230 }}>
+            <CardActionArea onClick={() => onSelect('usuals')} sx={{ py: 3, height: '100%' }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
                 <ShoppingCartIcon sx={{ fontSize: 52, color: 'secondary.main' }} />
                 <Typography variant="h6">Restock Usuals</Typography>
@@ -42,8 +42,8 @@ export default function HomeScreen({ onSelect }) {
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('working_lists')} sx={{ py: 3 }}>
+          <Card elevation={2} sx={{ height: 230 }}>
+            <CardActionArea onClick={() => onSelect('working_lists')} sx={{ py: 3, height: '100%' }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
                 <ListAltIcon sx={{ fontSize: 52, color: 'info.main' }} />
                 <Typography variant="h6">My Lists</Typography>
@@ -55,8 +55,8 @@ export default function HomeScreen({ onSelect }) {
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('weekly_planner')} sx={{ py: 3 }}>
+          <Card elevation={2} sx={{ height: 230 }}>
+            <CardActionArea onClick={() => onSelect('weekly_planner')} sx={{ py: 3, height: '100%' }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
                 <CalendarMonthIcon sx={{ fontSize: 52, color: 'warning.main' }} />
                 <Typography variant="h6">Weekly Planner</Typography>
@@ -68,8 +68,8 @@ export default function HomeScreen({ onSelect }) {
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardActionArea onClick={() => onSelect('recipes')} sx={{ py: 3 }}>
+          <Card elevation={2} sx={{ height: 230 }}>
+            <CardActionArea onClick={() => onSelect('recipes')} sx={{ py: 3, height: '100%' }}>
               <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
                 <MenuBookIcon sx={{ fontSize: 52, color: 'success.main' }} />
                 <Typography variant="h6">Recipes</Typography>
