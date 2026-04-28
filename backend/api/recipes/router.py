@@ -1,19 +1,75 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
+from sse_starlette.sse import EventSourceResponse
 
 from database import get_session
 import services.recipes as recipes_crud
+from agent.recipe_extractor import build_recipe_extractor_graph, EXTRACTOR_NODE_MESSAGES
+from server.sse import sse_event, status_event, error_event
 from .models import (
     RecipeCreateRequest,
     RecipeUpdateRequest,
     RecipeIngredientCreateRequest,
     RecipeIngredientUpdateRequest,
+    RecipeExtractRequest,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/recipes/extract-from-url")
+async def extract_recipe_from_url(request: RecipeExtractRequest):
+    """
+    Extract a recipe from a URL using an agentic workflow and save it to the database.
+
+    Returns an SSE stream with status events and a final 'recipe_extracted' event.
+    """
+    url = str(request.url)
+    logger.info(f"POST /recipes/extract-from-url - url={url!r}")
+
+    async def event_generator():
+        graph = build_recipe_extractor_graph()
+        initial_input = {
+            "recipe_url": url,
+            "raw_html": None,
+            "json_ld": None,
+            "recipe_name": None,
+            "recipe_creator": None,
+            "recipe_notes": None,
+            "extracted_ingredients": None,
+            "extracted_directions": None,
+            "saved_recipe": None,
+            "error": None,
+        }
+
+        try:
+            accumulated = {}
+            async for updates in graph.astream(
+                initial_input, config={"configurable": {}}, stream_mode="updates"
+            ):
+                for node_name, node_output in updates.items():
+                    accumulated.update(node_output)
+                    msg = EXTRACTOR_NODE_MESSAGES.get(node_name, "Processing...")
+                    yield status_event(node_name, msg)
+
+            if accumulated.get("error"):
+                yield error_event(accumulated["error"])
+                return
+
+            saved_recipe = accumulated.get("saved_recipe")
+            if saved_recipe:
+                yield sse_event("recipe_extracted", {"recipe": saved_recipe})
+            else:
+                yield error_event("Recipe extraction completed but no recipe was saved")
+
+        except Exception as e:
+            logger.exception(f"Error extracting recipe from {url}: {e}")
+            yield error_event(str(e))
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/recipes")

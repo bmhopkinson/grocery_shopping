@@ -64,6 +64,31 @@ def get_refine_search_query(dish: str, sources: list[str] = None) -> str:
     return f"{dish} recipe"
 
 
+def get_extract_recipe_metadata_prompt(content: str, url: str) -> str:
+    """Prompt for extracting recipe name, creator, and description from page content."""
+    return f"""Extract metadata from this recipe page.
+
+URL: {url}
+
+Page content:
+{content}
+
+Extract:
+1. Recipe name - the specific dish name (not the website name)
+2. Creator/author - the person or publication who created this recipe (null if not found)
+3. Notes - a brief 1-2 sentence description of the dish (null if not found)"""
+
+
+def get_extract_directions_prompt(content: str, recipe_name: str) -> str:
+    """Prompt for extracting step-by-step cooking instructions."""
+    return f"""Extract the step-by-step cooking instructions for "{recipe_name}" from this recipe page.
+
+Page content:
+{content}
+
+Return each step as a complete sentence in the correct order. Include all preparation and cooking steps. Do not include ingredient quantities in the steps."""
+
+
 def get_extract_ingredients_prompt(recipe_content: str) -> str:
     """Prompt for extracting ingredients from recipe page content."""
     return f"""Extract all ingredients from this recipe page. For each ingredient, identify:

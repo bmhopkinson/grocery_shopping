@@ -55,7 +55,19 @@ class ExtractedIngredients(BaseModel):
     ingredients: List[Ingredient] = Field(description="List of ingredients with amounts and units")
 
 
-# Graph state definition
+class RecipeMetadata(BaseModel):
+    """Metadata extracted from a recipe page."""
+    name: str = Field(description="The specific recipe/dish name")
+    creator: Optional[str] = Field(default=None, description="Recipe author or creator name, or null if not found")
+    notes: Optional[str] = Field(default=None, description="Brief 1-2 sentence description of the dish, or null if not found")
+
+
+class ExtractedDirections(BaseModel):
+    """Step-by-step cooking directions extracted from a recipe."""
+    directions: List[str] = Field(description="Ordered list of cooking steps, each as a complete sentence")
+
+
+# Graph state definitions
 
 class MealPlannerState(TypedDict):
     """State for the meal planner graph."""
@@ -80,3 +92,25 @@ class MealPlannerState(TypedDict):
 
     # Error handling
     error: Optional[str]  # Error message to surface to UI
+
+
+class RecipeExtractorState(TypedDict):
+    """State for the recipe extractor graph."""
+    recipe_url: str
+
+    # Fetched content
+    raw_html: Optional[str]
+    json_ld: Optional[str]
+
+    # Extracted fields
+    recipe_name: Optional[str]
+    recipe_creator: Optional[str]
+    recipe_notes: Optional[str]
+    extracted_ingredients: Optional[List[Ingredient]]
+    extracted_directions: Optional[List[str]]
+
+    # Result
+    saved_recipe: Optional[dict]
+
+    # Error handling
+    error: Optional[str]

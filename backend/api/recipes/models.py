@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, AnyHttpUrl
 
 
 class RecipeCreateRequest(BaseModel):
@@ -26,3 +26,7 @@ class RecipeIngredientUpdateRequest(BaseModel):
     name: str
     amount: str = ""
     unit: str = ""
+
+
+class RecipeExtractRequest(BaseModel):
+    url: AnyHttpUrl
