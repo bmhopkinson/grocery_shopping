@@ -109,6 +109,9 @@ class RecipeExtractorState(TypedDict):
     extracted_ingredients: Optional[List[Ingredient]]
     extracted_directions: Optional[List[str]]
 
+    # Image
+    recipe_image_url: Optional[str]
+
     # Result
     saved_recipe: Optional[dict]
 

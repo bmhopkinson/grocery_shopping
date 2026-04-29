@@ -3,8 +3,6 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .models import Base
-
 _engine = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
@@ -22,9 +20,6 @@ async def init_engine() -> None:
 
     _engine = create_async_engine(async_url, echo=False, pool_pre_ping=True)
     _session_factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 
 async def close_engine() -> None:

@@ -1,4 +1,4 @@
-.PHONY: proxy docker-build docker-up docker-down docker-shell run-local help start-all stop-all
+.PHONY: proxy docker-build docker-up docker-down docker-shell run-local help start-all stop-all migrate migrate-history migrate-stamp
 
 help:
 	@echo "Meal Planner Commands:"
@@ -10,6 +10,9 @@ help:
 	@echo "  make run-local    - Run the meal planner locally (no Docker)"
 	@echo "  make start-all    - Start proxy and all Docker containers (backend + frontend)"
 	@echo "  make stop-all     - Stop proxy and all Docker containers"
+	@echo "  make migrate       - Run pending database migrations (alembic upgrade head)"
+	@echo "  make migrate-history - Show migration history"
+	@echo "  make migrate-stamp - Stamp existing DB as initial schema (run once on pre-alembic DBs)"
 	@echo ""
 	@echo "Typical Docker workflow:"
 	@echo "  1. make proxy        (in one terminal)"
@@ -42,6 +45,16 @@ start-all: docker-build
 	@echo "Starting Docker containers..."
 	cd docker && docker compose --env-file ../.env up -d
 	@echo "All services started. Log: proxy.log. Use 'make stop-all' to stop."
+
+migrate:
+	docker exec meal-planner bash -c "cd /app/backend && alembic upgrade head"
+
+migrate-history:
+	docker exec meal-planner bash -c "cd /app/backend && alembic history"
+
+migrate-stamp:
+	@echo "Stamping existing DB as initial schema (run once on pre-alembic databases)..."
+	docker exec meal-planner bash -c "cd /app/backend && alembic stamp 001"
 
 stop-all:
 	@echo "Stopping Docker containers..."

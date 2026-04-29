@@ -28,7 +28,10 @@ services:
     volumes:
       - ../backend:/app/backend
       - ../logs:/app/logs
-    command: uvicorn meal_planner_server:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload
+    command: >
+      bash -c "cd /app/backend &&
+               alembic upgrade head &&
+               uvicorn meal_planner_server:app --host 0.0.0.0 --port $${BACKEND_PORT:-8000} --reload"
     env_file:
       - ../.env
     environment:

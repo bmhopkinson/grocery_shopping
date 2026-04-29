@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Box, List, ListItem, ListItemButton, ListItemText, ListItemSecondaryAction,
-  Typography, Button, TextField, Dialog, DialogTitle,
+  ListItemAvatar, Avatar, Typography, Button, TextField, Dialog, DialogTitle,
   DialogContent, DialogActions, IconButton, CircularProgress, Alert, Divider, Paper,
   LinearProgress, Stack,
 } from '@mui/material'
@@ -168,6 +168,14 @@ export default function RecipesList({ onSelectRecipe }) {
                 {index > 0 && <Divider />}
                 <ListItem disablePadding>
                   <ListItemButton onClick={() => onSelectRecipe(recipe)}>
+                    <ListItemAvatar>
+                      <Avatar
+                        variant="rounded"
+                        src={`/api/recipes/${recipe.id}/image`}
+                        imgProps={{ onError: e => { e.currentTarget.style.display = 'none' } }}
+                        sx={{ width: 48, height: 48, mr: 1 }}
+                      />
+                    </ListItemAvatar>
                     <ListItemText
                       primary={recipe.name}
                       secondary={recipe.notes || recipe.url || undefined}

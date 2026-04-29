@@ -46,8 +46,17 @@ async def create_recipe(
     url: Optional[str],
     notes: Optional[str],
     instructions: list,
+    image_data: Optional[bytes] = None,
+    image_content_type: Optional[str] = None,
 ) -> dict:
-    recipe = Recipe(name=name, url=url, notes=notes, instructions=instructions)
+    recipe = Recipe(
+        name=name,
+        url=url,
+        notes=notes,
+        instructions=instructions,
+        image_data=image_data,
+        image_content_type=image_content_type,
+    )
     session.add(recipe)
     await session.commit()
     await session.refresh(recipe)
@@ -153,3 +162,13 @@ async def delete_recipe_ingredient(session: AsyncSession, ingredient_id: str) ->
     await session.delete(ingredient)
     await session.commit()
     return True
+
+
+async def get_recipe_image(
+    session: AsyncSession, recipe_id: str
+) -> Optional[tuple[bytes, str]]:
+    result = await session.execute(select(Recipe).where(Recipe.id == uuid.UUID(recipe_id)))
+    r = result.scalar_one_or_none()
+    if not r or not r.image_data:
+        return None
+    return (r.image_data, r.image_content_type or "image/jpeg")

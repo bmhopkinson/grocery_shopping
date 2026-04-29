@@ -192,6 +192,14 @@ export default function RecipeDetail({ recipeId }) {
     <Box>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
+      <Box
+        component="img"
+        src={`/api/recipes/${recipeId}/image`}
+        alt={name}
+        onError={e => { e.currentTarget.style.display = 'none' }}
+        sx={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 1, mb: 2, display: 'block' }}
+      />
+
       <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
         <Stack spacing={2}>
           <TextField

@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 
 from database import get_session
@@ -39,6 +40,7 @@ async def extract_recipe_from_url(request: RecipeExtractRequest):
             "recipe_name": None,
             "recipe_creator": None,
             "recipe_notes": None,
+            "recipe_image_url": None,
             "extracted_ingredients": None,
             "extracted_directions": None,
             "saved_recipe": None,
@@ -84,6 +86,16 @@ async def create_recipe(request: RecipeCreateRequest):
         return await recipes_crud.create_recipe(
             session, request.name, request.url, request.notes, request.instructions
         )
+
+
+@router.get("/recipes/{recipe_id}/image")
+async def get_recipe_image(recipe_id: str):
+    async with get_session() as session:
+        result = await recipes_crud.get_recipe_image(session, recipe_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No image for this recipe")
+    image_data, content_type = result
+    return Response(content=image_data, media_type=content_type)
 
 
 @router.get("/recipes/{recipe_id}")

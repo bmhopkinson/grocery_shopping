@@ -74,11 +74,19 @@ def extract_recipe_metadata(state: RecipeExtractorState) -> dict:
 
         notes = data.get("description")
 
+        image = data.get("image")
+        if isinstance(image, list):
+            image = image[0]
+        if isinstance(image, dict):
+            image = image.get("url")
+        image_url = image if isinstance(image, str) else None
+
         if name:
             return {
                 "recipe_name": name,
                 "recipe_creator": creator,
                 "recipe_notes": notes,
+                "recipe_image_url": image_url,
             }
 
     raw_html = state.get("raw_html") or ""
@@ -152,7 +160,7 @@ async def save_recipe_to_db(state: RecipeExtractorState) -> dict:
     Save the extracted recipe, ingredients, and directions to the database.
 
     Reads: recipe_name, recipe_url, recipe_creator, recipe_notes,
-           extracted_ingredients, extracted_directions
+           extracted_ingredients, extracted_directions, recipe_image_url
     Writes: saved_recipe
     """
     from database import get_session
@@ -173,8 +181,24 @@ async def save_recipe_to_db(state: RecipeExtractorState) -> dict:
     else:
         full_notes = notes
 
+    image_data = None
+    image_content_type = None
+    image_url = state.get("recipe_image_url")
+    if image_url:
+        try:
+            async with create_http_client() as client:
+                img_response = await client.get(image_url, timeout=5.0)
+                img_response.raise_for_status()
+                image_data = img_response.content
+                image_content_type = img_response.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        except Exception as e:
+            logger.warning(f"Failed to download recipe image from {image_url}: {e}")
+
     async with get_session() as session:
-        recipe = await recipes_crud.create_recipe(session, name, url, full_notes, directions)
+        recipe = await recipes_crud.create_recipe(
+            session, name, url, full_notes, directions,
+            image_data=image_data, image_content_type=image_content_type,
+        )
         recipe_id = recipe["id"]
 
         for ingredient in ingredients:
