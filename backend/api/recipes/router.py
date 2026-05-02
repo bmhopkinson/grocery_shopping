@@ -84,7 +84,8 @@ async def list_recipes():
 async def create_recipe(request: RecipeCreateRequest):
     async with get_session() as session:
         return await recipes_crud.create_recipe(
-            session, request.name, request.url, request.notes, request.instructions
+            session, request.name, request.url, request.notes, request.instructions,
+            group_id=request.group_id,
         )
 
 
@@ -113,7 +114,8 @@ async def get_recipe(recipe_id: str):
 async def update_recipe(recipe_id: str, request: RecipeUpdateRequest):
     async with get_session() as session:
         recipe = await recipes_crud.update_recipe(
-            session, recipe_id, request.name, request.url, request.notes, request.instructions
+            session, recipe_id, request.name, request.url, request.notes, request.instructions,
+            group_id=request.group_id,
         )
     if recipe is None:
         raise HTTPException(status_code=404, detail="Recipe not found")

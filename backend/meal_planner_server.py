@@ -18,6 +18,7 @@ Event types sent via SSE:
 Usage: uvicorn meal_planner_server:app --host 0.0.0.0 --port 8000
 """
 
+import asyncio
 import logging
 import logging.handlers
 from contextlib import asynccontextmanager
@@ -25,6 +26,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from alembic.config import Config as AlembicConfig
+from alembic import command as alembic_command
 
 from agent.meal_planner import get_checkpointer_async
 from database import init_engine, close_engine
@@ -68,6 +72,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception(f"Failed to initialize checkpointer: {e}")
         raise
+    alembic_cfg = AlembicConfig(str(Path(__file__).resolve().parent / "alembic.ini"))
+    await asyncio.get_event_loop().run_in_executor(
+        None, lambda: alembic_command.upgrade(alembic_cfg, "head")
+    )
+    logger.info("Alembic migrations applied")
     await init_engine()
     logger.info("SQLAlchemy engine and tables ready")
     yield

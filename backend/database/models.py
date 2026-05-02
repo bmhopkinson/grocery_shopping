@@ -3,7 +3,7 @@ from datetime import datetime, date
 
 from sqlalchemy import String, Integer, Date, DateTime, ForeignKey, LargeBinary, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -55,6 +55,14 @@ class WorkingListItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RecipeGroup(Base):
+    __tablename__ = "recipe_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Recipe(Base):
     __tablename__ = "recipes"
 
@@ -65,6 +73,12 @@ class Recipe(Base):
     instructions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recipe_groups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    group: Mapped["RecipeGroup | None"] = relationship("RecipeGroup", lazy="joined")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

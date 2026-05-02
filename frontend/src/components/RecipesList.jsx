@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box, List, ListItem, ListItemButton, ListItemText, ListItemSecondaryAction,
   ListItemAvatar, Avatar, Typography, Button, TextField, Dialog, DialogTitle,
   DialogContent, DialogActions, IconButton, CircularProgress, Alert, Divider, Paper,
-  LinearProgress, Stack,
+  LinearProgress, Stack, ListSubheader,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -141,6 +141,20 @@ export default function RecipesList({ onSelectRecipe }) {
     setExtractError(null)
   }
 
+  // Group recipes: named groups alphabetically, uncategorized last
+  const groupedRecipes = useMemo(() => {
+    const map = {}
+    for (const r of recipes) {
+      const key = r.group?.name ?? ''
+      if (!map[key]) map[key] = []
+      map[key].push(r)
+    }
+    const named = Object.keys(map).filter(k => k !== '').sort()
+    const sections = named.map(name => ({ label: name, recipes: map[name] }))
+    if (map['']?.length) sections.push({ label: 'Uncategorized', recipes: map[''] })
+    return sections
+  }, [recipes])
+
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
 
   return (
@@ -163,31 +177,38 @@ export default function RecipesList({ onSelectRecipe }) {
       ) : (
         <Paper variant="outlined">
           <List disablePadding>
-            {recipes.map((recipe, index) => (
-              <Box key={recipe.id}>
-                {index > 0 && <Divider />}
-                <ListItem disablePadding>
-                  <ListItemButton onClick={() => onSelectRecipe(recipe)}>
-                    <ListItemAvatar>
-                      <Avatar
-                        variant="rounded"
-                        src={`/api/recipes/${recipe.id}/image`}
-                        imgProps={{ onError: e => { e.currentTarget.style.display = 'none' } }}
-                        sx={{ width: 48, height: 48, mr: 1 }}
-                      />
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={recipe.name}
-                      secondary={recipe.notes || recipe.url || undefined}
-                      secondaryTypographyProps={{ noWrap: true }}
-                    />
-                  </ListItemButton>
-                  <ListItemSecondaryAction>
-                    <IconButton size="small" color="error" onClick={e => handleDelete(e, recipe)}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
+            {groupedRecipes.map((section, sIdx) => (
+              <Box key={section.label}>
+                <ListSubheader sx={{ lineHeight: '36px', bgcolor: 'background.default' }}>
+                  {section.label}
+                </ListSubheader>
+                {section.recipes.map((recipe, rIdx) => (
+                  <Box key={recipe.id}>
+                    {(sIdx > 0 || rIdx > 0) && <Divider />}
+                    <ListItem disablePadding>
+                      <ListItemButton onClick={() => onSelectRecipe(recipe)}>
+                        <ListItemAvatar>
+                          <Avatar
+                            variant="rounded"
+                            src={`/api/recipes/${recipe.id}/image`}
+                            imgProps={{ onError: e => { e.currentTarget.style.display = 'none' } }}
+                            sx={{ width: 48, height: 48, mr: 1 }}
+                          />
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={recipe.name}
+                          secondary={recipe.notes || recipe.url || undefined}
+                          secondaryTypographyProps={{ noWrap: true }}
+                        />
+                      </ListItemButton>
+                      <ListItemSecondaryAction>
+                        <IconButton size="small" color="error" onClick={e => handleDelete(e, recipe)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  </Box>
+                ))}
               </Box>
             ))}
           </List>

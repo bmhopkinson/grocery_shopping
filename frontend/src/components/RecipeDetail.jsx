@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Box, Typography, TextField, Button, Divider, List, ListItem,
   ListItemText, ListItemSecondaryAction, IconButton, CircularProgress,
-  Alert, Paper, Stack,
+  Alert, Paper, Stack, Autocomplete,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import AddToWorkingListDialog from './AddToWorkingListDialog'
 
 function IngredientRow({ ingredient, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false)
@@ -84,7 +86,52 @@ export default function RecipeDetail({ recipeId }) {
   const [url, setUrl] = useState('')
   const [notes, setNotes] = useState('')
   const [instructions, setInstructions] = useState([])
+  const [groupValue, setGroupValue] = useState(null) // null | {id, name} | string (new name)
   const [dirty, setDirty] = useState(false)
+
+  const [groups, setGroups] = useState([])
+  const fetchGroups = useCallback(() => {
+    fetch('/api/groups').then(r => r.ok ? r.json() : []).then(setGroups).catch(() => {})
+  }, [])
+  useEffect(() => { fetchGroups() }, [fetchGroups])
+
+  // Add to working list
+  const [listDialog, setListDialog] = useState({ open: false, lists: [], submitting: false })
+
+  const handleOpenListDialog = async () => {
+    const res = await fetch('/api/working-lists')
+    const lists = res.ok ? await res.json() : []
+    setListDialog({ open: true, lists, submitting: false })
+  }
+
+  const handleAddToList = async (selection) => {
+    setListDialog(prev => ({ ...prev, submitting: true }))
+    try {
+      let listId = selection
+      if (selection?.action === 'create') {
+        const res = await fetch('/api/working-lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: selection.list_name }),
+        })
+        if (!res.ok) throw new Error('Failed to create list')
+        const created = await res.json()
+        listId = created.id
+      }
+      const ingredients = recipe.ingredients || []
+      await Promise.all(ingredients.map(ing =>
+        fetch(`/api/working-lists/${listId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: ing.name, amount: ing.amount, unit: ing.unit }),
+        })
+      ))
+      setListDialog({ open: false, lists: [], submitting: false })
+    } catch (e) {
+      setError(e.message)
+      setListDialog(prev => ({ ...prev, submitting: false }))
+    }
+  }
 
   // New ingredient form
   const [newIngName, setNewIngName] = useState('')
@@ -102,6 +149,7 @@ export default function RecipeDetail({ recipeId }) {
       setUrl(data.url || '')
       setNotes(data.notes || '')
       setInstructions(data.instructions || [])
+      setGroupValue(data.group || null)
       setDirty(false)
     } catch (e) {
       setError(e.message)
@@ -115,10 +163,26 @@ export default function RecipeDetail({ recipeId }) {
   const saveRecipe = async () => {
     setSaving(true)
     try {
+      let resolvedGroupId = null
+      if (typeof groupValue === 'string' && groupValue.trim()) {
+        const res = await fetch('/api/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: groupValue.trim() }),
+        })
+        if (!res.ok) throw new Error('Failed to create group')
+        const created = await res.json()
+        resolvedGroupId = created.id
+        setGroupValue(created)
+        fetchGroups()
+      } else if (groupValue?.id) {
+        resolvedGroupId = groupValue.id
+      }
+
       const res = await fetch(`/api/recipes/${recipeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, url: url || null, notes: notes || null, instructions }),
+        body: JSON.stringify({ name, url: url || null, notes: notes || null, instructions, group_id: resolvedGroupId }),
       })
       if (!res.ok) throw new Error('Failed to save')
       setDirty(false)
@@ -222,10 +286,31 @@ export default function RecipeDetail({ recipeId }) {
             value={notes}
             onChange={e => { setNotes(e.target.value); setDirty(true) }}
           />
+          <Autocomplete
+            freeSolo
+            options={groups}
+            getOptionLabel={g => typeof g === 'string' ? g : g.name}
+            value={groupValue}
+            onChange={(_, v) => { setGroupValue(v); setDirty(true) }}
+            onInputChange={(_, v, reason) => { if (reason === 'input') { setGroupValue(v || null); setDirty(true) } }}
+            isOptionEqualToValue={(o, v) => o.id === v?.id}
+            renderInput={params => <TextField {...params} label="Group" placeholder="e.g. Italian, Asian, Desserts" helperText="Pick existing or type a new group name" />}
+          />
         </Stack>
       </Paper>
 
-      <Typography variant="h6" gutterBottom>Ingredients</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="h6">Ingredients</Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<ShoppingCartIcon />}
+          onClick={handleOpenListDialog}
+          disabled={!(recipe.ingredients?.length)}
+        >
+          Add to List
+        </Button>
+      </Box>
       <Paper variant="outlined" sx={{ mb: 3 }}>
         <List dense disablePadding>
           {(recipe.ingredients || []).map(ing => (
@@ -300,6 +385,15 @@ export default function RecipeDetail({ recipeId }) {
           {saving ? 'Saving…' : 'Save Changes'}
         </Button>
       </Box>
+
+      <AddToWorkingListDialog
+        open={listDialog.open}
+        onClose={() => setListDialog(prev => ({ ...prev, open: false }))}
+        itemCount={recipe.ingredients?.length || 0}
+        workingLists={listDialog.lists}
+        onConfirm={handleAddToList}
+        submitting={listDialog.submitting}
+      />
     </Box>
   )
 }

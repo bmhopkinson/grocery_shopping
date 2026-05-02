@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Accordion, AccordionSummary, AccordionDetails,
+  Autocomplete,
   Box, Typography, List, ListItem, ListItemText,
   IconButton, TextField, Select, MenuItem, FormControl, InputLabel,
   Button, Chip, Alert, Tooltip, Grid, Collapse,
@@ -45,6 +46,7 @@ export default function WeeklyPlanner() {
   const [success, setSuccess] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ADD)
+  const [recipes, setRecipes] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [editId, setEditId] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -115,6 +117,7 @@ export default function WeeklyPlanner() {
       const created = await res.json()
       setMeals(prev => [...prev, created])
       setAddForm(EMPTY_ADD)
+      setRecipes([])
       setShowAdd(false)
       setSuccess('Meal added')
       setTimeout(() => setSuccess(null), 3000)
@@ -307,11 +310,35 @@ export default function WeeklyPlanner() {
               {isCurrent && (
                 <Box sx={{ mt: 1.5 }}>
                   {!showAdd ? (
-                    <Button startIcon={<AddIcon />} size="small" variant="outlined" onClick={() => setShowAdd(true)}>
+                    <Button startIcon={<AddIcon />} size="small" variant="outlined" onClick={async () => {
+                      setShowAdd(true)
+                      try {
+                        const res = await fetch('/api/recipes')
+                        if (res.ok) setRecipes(await res.json())
+                      } catch {}
+                    }}>
                       Add Meal
                     </Button>
                   ) : (
                     <Box component="form" onSubmit={handleAdd} sx={{ mt: 1 }}>
+                      {recipes.length > 0 && (
+                        <Autocomplete
+                          options={[...recipes].sort((a, b) => {
+                            const ga = a.group?.name || 'zzz'
+                            const gb = b.group?.name || 'zzz'
+                            return ga.localeCompare(gb) || a.name.localeCompare(b.name)
+                          })}
+                          getOptionLabel={r => r.name}
+                          groupBy={r => r.group?.name || 'Uncategorized'}
+                          onChange={(_, recipe) => {
+                            if (recipe) setAddForm(f => ({ ...f, name: recipe.name, url: recipe.url || '' }))
+                          }}
+                          renderInput={params => (
+                            <TextField {...params} size="small" label="Pick from saved recipes (optional)" sx={{ mb: 1.5 }} />
+                          )}
+                          isOptionEqualToValue={(o, v) => o.id === v.id}
+                        />
+                      )}
                       <Grid container spacing={1}>
                         <Grid item xs={12} sm={3}>
                           <FormControl fullWidth size="small">
@@ -355,7 +382,7 @@ export default function WeeklyPlanner() {
                         >
                           Add
                         </Button>
-                        <Button size="small" onClick={() => { setShowAdd(false); setAddForm(EMPTY_ADD) }}>
+                        <Button size="small" onClick={() => { setShowAdd(false); setAddForm(EMPTY_ADD); setRecipes([]) }}>
                           Cancel
                         </Button>
                       </Box>

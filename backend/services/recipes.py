@@ -14,6 +14,8 @@ def _recipe_to_dict(r: Recipe) -> dict:
         "url": r.url,
         "notes": r.notes,
         "instructions": r.instructions or [],
+        "group_id": str(r.group_id) if r.group_id else None,
+        "group": {"id": str(r.group.id), "name": r.group.name} if r.group else None,
         "created_at": r.created_at.isoformat(),
     }
 
@@ -48,6 +50,7 @@ async def create_recipe(
     instructions: list,
     image_data: Optional[bytes] = None,
     image_content_type: Optional[str] = None,
+    group_id: Optional[uuid.UUID] = None,
 ) -> dict:
     recipe = Recipe(
         name=name,
@@ -56,6 +59,7 @@ async def create_recipe(
         instructions=instructions,
         image_data=image_data,
         image_content_type=image_content_type,
+        group_id=group_id,
     )
     session.add(recipe)
     await session.commit()
@@ -70,6 +74,7 @@ async def update_recipe(
     url: Optional[str],
     notes: Optional[str],
     instructions: list,
+    group_id: Optional[uuid.UUID] = None,
 ) -> Optional[dict]:
     result = await session.execute(select(Recipe).where(Recipe.id == uuid.UUID(recipe_id)))
     recipe = result.scalar_one_or_none()
@@ -79,6 +84,7 @@ async def update_recipe(
     recipe.url = url
     recipe.notes = notes
     recipe.instructions = instructions
+    recipe.group_id = group_id
     await session.commit()
     await session.refresh(recipe)
     return _recipe_to_dict(recipe)

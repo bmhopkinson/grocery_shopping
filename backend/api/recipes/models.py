@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 from pydantic import BaseModel, AnyHttpUrl
 
 
@@ -7,6 +8,7 @@ class RecipeCreateRequest(BaseModel):
     url: Optional[str] = None
     notes: Optional[str] = None
     instructions: list[str] = []
+    group_id: Optional[UUID] = None
 
 
 class RecipeUpdateRequest(BaseModel):
@@ -14,6 +16,7 @@ class RecipeUpdateRequest(BaseModel):
     url: Optional[str] = None
     notes: Optional[str] = None
     instructions: list[str] = []
+    group_id: Optional[UUID] = None
 
 
 class RecipeIngredientCreateRequest(BaseModel):
