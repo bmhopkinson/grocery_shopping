@@ -1,4 +1,6 @@
-.PHONY: proxy docker-build docker-up docker-down docker-shell run-local help start-all stop-all migrate migrate-history migrate-stamp
+.PHONY: proxy docker-build docker-up docker-down docker-shell run-local help start-all stop-all migrate migrate-history migrate-stamp backup restore
+
+BACKUP_DIR ?= backups
 
 help:
 	@echo "Meal Planner Commands:"
@@ -13,6 +15,8 @@ help:
 	@echo "  make migrate       - Run pending database migrations (alembic upgrade head)"
 	@echo "  make migrate-history - Show migration history"
 	@echo "  make migrate-stamp - Stamp existing DB as initial schema (run once on pre-alembic DBs)"
+	@echo "  make backup       - Dump database to backups/backup_TIMESTAMP.sql"
+	@echo "  make restore FILE=backups/backup_....sql - Restore database from a dump file"
 	@echo ""
 	@echo "Typical Docker workflow:"
 	@echo "  1. make proxy        (in one terminal)"
@@ -55,6 +59,18 @@ migrate-history:
 migrate-stamp:
 	@echo "Stamping existing DB as initial schema (run once on pre-alembic databases)..."
 	docker exec meal-planner bash -c "cd /app/backend && alembic stamp 001"
+
+backup:
+	@mkdir -p $(BACKUP_DIR)
+	@BACKUP_FILE=$(BACKUP_DIR)/backup_$$(date +%Y%m%d_%H%M%S).sql; \
+	docker exec meal-planner-db pg_dump -U mealplanner --clean --if-exists mealplanner > $$BACKUP_FILE && \
+	echo "Backup saved to $$BACKUP_FILE"
+
+restore:
+	@test -n "$(FILE)" || (echo "Usage: make restore FILE=backups/backup_....sql" && exit 1)
+	@echo "Restoring from $(FILE)..."
+	@docker exec -i meal-planner-db psql -U mealplanner mealplanner < $(FILE)
+	@echo "Restore complete."
 
 stop-all:
 	@echo "Stopping Docker containers..."

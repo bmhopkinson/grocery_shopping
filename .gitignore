@@ -256,3 +256,5 @@ pids
 
 # Vite
 *.local
+# Database backups
+backups/

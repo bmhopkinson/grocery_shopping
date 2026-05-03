@@ -1,10 +1,11 @@
-import { Box, Typography, Card, CardActionArea, CardContent, Grid, Chip } from '@mui/material'
+import { Box, Typography, Card, CardActionArea, CardContent, Grid, Chip, IconButton, Tooltip } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import TuneIcon from '@mui/icons-material/Tune'
 
 function NavCard({ onClick, icon, title, description }) {
   return (
@@ -32,9 +33,20 @@ export default function HomeScreen() {
   const navigate = useNavigate()
   return (
     <Box sx={{ py: 2 }}>
-      <Typography variant="h4" gutterBottom align="center">
-        Grocery Shopping
-      </Typography>
+      <Box sx={{ position: 'relative' }}>
+        <Typography variant="h4" gutterBottom align="center">
+          Grocery Shopping
+        </Typography>
+        <Tooltip title="Data Management">
+          <IconButton
+            onClick={() => navigate('/management')}
+            sx={{ position: 'absolute', top: 0, right: 0 }}
+            size="small"
+          >
+            <TuneIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Box sx={{ mt: 4, mb: 2 }}>
         <SectionHeader label="Plan & Shop" />
@@ -43,8 +55,8 @@ export default function HomeScreen() {
             <NavCard
               onClick={() => navigate('/meal-plan')}
               icon={<RestaurantMenuIcon sx={{ fontSize: 52, color: 'primary.main' }} />}
-              title="Plan Meals"
-              description="Search recipes and add ingredients to your shopping list"
+              title="Find Meals"
+              description="Search for new recipes and add ingredients to your shopping list"
             />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -87,6 +99,7 @@ export default function HomeScreen() {
           </Grid>
         </Grid>
       </Box>
+
     </Box>
   )
 }

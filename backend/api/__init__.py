@@ -5,6 +5,7 @@ from api.lists.router import router as lists_router
 from api.reminders.router import router as reminders_router
 from api.usuals.router import router as usuals_router
 from api.weekly.router import router as weekly_router
+from api.data_transfer.router import router as data_transfer_router
 
 all_routers = [
     planning_router,
@@ -14,4 +15,5 @@ all_routers = [
     reminders_router,
     usuals_router,
     weekly_router,
+    data_transfer_router,
 ]

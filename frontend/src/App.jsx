@@ -14,6 +14,7 @@ import WorkingLists from './components/WorkingLists'
 import RecipesList from './components/RecipesList'
 import RecipeDetail from './components/RecipeDetail'
 import WorkingListDetail from './components/WorkingListDetail'
+import Management from './components/Management'
 import PageShell from './components/PageShell'
 import BotanicalBanner from './components/BotanicalBanner'
 import { useMealPlanSession } from './hooks/useMealPlanSession'
@@ -179,6 +180,17 @@ function RecipeDetailRoute() {
   )
 }
 
+function ManagementRoute() {
+  const navigate = useNavigate()
+  return (
+    <AppLayout>
+      <PageShell onBack={() => navigate('/')} header={<Typography variant="h6">Data Management</Typography>}>
+        <Management />
+      </PageShell>
+    </AppLayout>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
@@ -191,6 +203,7 @@ export default function App() {
       <Route path="/weekly-planner" element={<WeeklyPlannerRoute />} />
       <Route path="/recipes" element={<RecipesRoute />} />
       <Route path="/recipes/:recipeId" element={<RecipeDetailRoute />} />
+      <Route path="/management" element={<ManagementRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
