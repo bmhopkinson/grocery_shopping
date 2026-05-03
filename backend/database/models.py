@@ -71,6 +71,7 @@ class Recipe(Base):
     url: Mapped[str | None] = mapped_column(String, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
     instructions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     image_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     group_id: Mapped[uuid.UUID | None] = mapped_column(

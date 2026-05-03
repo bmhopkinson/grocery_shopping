@@ -1,6 +1,7 @@
 import logging
+from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 
@@ -74,9 +75,22 @@ async def extract_recipe_from_url(request: RecipeExtractRequest):
     return EventSourceResponse(event_generator())
 
 
-@router.get("/recipes")
-async def list_recipes():
+@router.get("/recipes/tags")
+async def list_recipe_tags():
     async with get_session() as session:
+        return await recipes_crud.get_all_tags(session)
+
+
+@router.get("/recipes")
+async def list_recipes(
+    group_id: Optional[str] = Query(None),
+    tags: Optional[List[str]] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+):
+    async with get_session() as session:
+        if group_id is not None or tags or offset > 0:
+            return await recipes_crud.get_recipes_paginated(session, group_id, tags or [], offset, limit)
         return await recipes_crud.get_recipes(session)
 
 
@@ -85,7 +99,7 @@ async def create_recipe(request: RecipeCreateRequest):
     async with get_session() as session:
         return await recipes_crud.create_recipe(
             session, request.name, request.url, request.notes, request.instructions,
-            group_id=request.group_id,
+            group_id=request.group_id, tags=request.tags or None,
         )
 
 
@@ -115,7 +129,7 @@ async def update_recipe(recipe_id: str, request: RecipeUpdateRequest):
     async with get_session() as session:
         recipe = await recipes_crud.update_recipe(
             session, recipe_id, request.name, request.url, request.notes, request.instructions,
-            group_id=request.group_id,
+            group_id=request.group_id, tags=request.tags or None,
         )
     if recipe is None:
         raise HTTPException(status_code=404, detail="Recipe not found")

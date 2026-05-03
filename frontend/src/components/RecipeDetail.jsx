@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Box, Typography, TextField, Button, Divider, List, ListItem,
   ListItemText, ListItemSecondaryAction, IconButton, CircularProgress,
-  Alert, Paper, Stack, Autocomplete,
+  Alert, Paper, Stack, Autocomplete, Chip,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -10,6 +10,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import LocalOfferIcon from '@mui/icons-material/LocalOffer'
 import AddToWorkingListDialog from './AddToWorkingListDialog'
 
 function IngredientRow({ ingredient, onUpdate, onDelete }) {
@@ -87,6 +88,8 @@ export default function RecipeDetail({ recipeId }) {
   const [notes, setNotes] = useState('')
   const [instructions, setInstructions] = useState([])
   const [groupValue, setGroupValue] = useState(null) // null | {id, name} | string (new name)
+  const [tags, setTags] = useState([])
+  const [tagInput, setTagInput] = useState('')
   const [dirty, setDirty] = useState(false)
 
   const [groups, setGroups] = useState([])
@@ -150,6 +153,7 @@ export default function RecipeDetail({ recipeId }) {
       setNotes(data.notes || '')
       setInstructions(data.instructions || [])
       setGroupValue(data.group || null)
+      setTags(data.tags || [])
       setDirty(false)
     } catch (e) {
       setError(e.message)
@@ -182,7 +186,7 @@ export default function RecipeDetail({ recipeId }) {
       const res = await fetch(`/api/recipes/${recipeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, url: url || null, notes: notes || null, instructions, group_id: resolvedGroupId }),
+        body: JSON.stringify({ name, url: url || null, notes: notes || null, instructions, tags, group_id: resolvedGroupId }),
       })
       if (!res.ok) throw new Error('Failed to save')
       setDirty(false)
@@ -191,6 +195,19 @@ export default function RecipeDetail({ recipeId }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleAddTag = () => {
+    const trimmed = tagInput.trim().toLowerCase()
+    if (!trimmed || tags.includes(trimmed)) { setTagInput(''); return }
+    setTags(prev => [...prev, trimmed])
+    setTagInput('')
+    setDirty(true)
+  }
+
+  const handleRemoveTag = (tag) => {
+    setTags(prev => prev.filter(t => t !== tag))
+    setDirty(true)
   }
 
   const handleInstructionChange = (index, value) => {
@@ -296,6 +313,32 @@ export default function RecipeDetail({ recipeId }) {
             isOptionEqualToValue={(o, v) => o.id === v?.id}
             renderInput={params => <TextField {...params} label="Group" placeholder="e.g. Italian, Asian, Desserts" helperText="Pick existing or type a new group name" />}
           />
+          <Box>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+              {tags.map(tag => (
+                <Chip
+                  key={tag}
+                  label={tag}
+                  size="small"
+                  icon={<LocalOfferIcon />}
+                  onDelete={() => handleRemoveTag(tag)}
+                />
+              ))}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                label="Add tag"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+                sx={{ flex: 1 }}
+              />
+              <Button variant="outlined" size="small" onClick={handleAddTag} disabled={!tagInput.trim()}>
+                Add
+              </Button>
+            </Box>
+          </Box>
         </Stack>
       </Paper>
 

@@ -1,8 +1,10 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func, or_, text, cast
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from database.models import Recipe, RecipeIngredient
 
@@ -14,6 +16,7 @@ def _recipe_to_dict(r: Recipe) -> dict:
         "url": r.url,
         "notes": r.notes,
         "instructions": r.instructions or [],
+        "tags": r.tags or [],
         "group_id": str(r.group_id) if r.group_id else None,
         "group": {"id": str(r.group.id), "name": r.group.name} if r.group else None,
         "created_at": r.created_at.isoformat(),
@@ -42,6 +45,37 @@ async def get_recipe(session: AsyncSession, recipe_id: str) -> Optional[dict]:
     return _recipe_to_dict(r) if r else None
 
 
+async def get_recipes_paginated(
+    session: AsyncSession,
+    group_id: Optional[str],
+    tags: list[str],
+    offset: int,
+    limit: int,
+) -> dict:
+    query = select(Recipe)
+    if group_id == "none":
+        query = query.where(Recipe.group_id.is_(None))
+    elif group_id is not None:
+        query = query.where(Recipe.group_id == uuid.UUID(group_id))
+    if tags:
+        query = query.where(or_(*[Recipe.tags.op("@>")(cast([t], JSONB)) for t in tags]))
+
+    total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar()
+    rows = await session.execute(query.order_by(Recipe.name).offset(offset).limit(limit))
+    recipes = [_recipe_to_dict(r) for r in rows.scalars()]
+    return {"recipes": recipes, "total": total, "has_more": offset + len(recipes) < total}
+
+
+async def get_all_tags(session: AsyncSession) -> list[str]:
+    result = await session.execute(
+        select(func.jsonb_array_elements_text(Recipe.tags).label("tag"))
+        .where(Recipe.tags.isnot(None))
+        .distinct()
+        .order_by(text("tag"))
+    )
+    return [row.tag for row in result]
+
+
 async def create_recipe(
     session: AsyncSession,
     name: str,
@@ -51,12 +85,14 @@ async def create_recipe(
     image_data: Optional[bytes] = None,
     image_content_type: Optional[str] = None,
     group_id: Optional[uuid.UUID] = None,
+    tags: Optional[list] = None,
 ) -> dict:
     recipe = Recipe(
         name=name,
         url=url,
         notes=notes,
         instructions=instructions,
+        tags=tags or None,
         image_data=image_data,
         image_content_type=image_content_type,
         group_id=group_id,
@@ -75,6 +111,7 @@ async def update_recipe(
     notes: Optional[str],
     instructions: list,
     group_id: Optional[uuid.UUID] = None,
+    tags: Optional[list] = None,
 ) -> Optional[dict]:
     result = await session.execute(select(Recipe).where(Recipe.id == uuid.UUID(recipe_id)))
     recipe = result.scalar_one_or_none()
@@ -85,6 +122,9 @@ async def update_recipe(
     recipe.notes = notes
     recipe.instructions = instructions
     recipe.group_id = group_id
+    recipe.tags = tags or None
+    flag_modified(recipe, 'instructions')
+    flag_modified(recipe, 'tags')
     await session.commit()
     await session.refresh(recipe)
     return _recipe_to_dict(recipe)

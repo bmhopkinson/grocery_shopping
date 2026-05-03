@@ -8,6 +8,7 @@ class RecipeCreateRequest(BaseModel):
     url: Optional[str] = None
     notes: Optional[str] = None
     instructions: list[str] = []
+    tags: list[str] = []
     group_id: Optional[UUID] = None
 
 
@@ -16,6 +17,7 @@ class RecipeUpdateRequest(BaseModel):
     url: Optional[str] = None
     notes: Optional[str] = None
     instructions: list[str] = []
+    tags: list[str] = []
     group_id: Optional[UUID] = None
 
 
