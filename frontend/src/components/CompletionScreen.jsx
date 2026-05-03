@@ -18,44 +18,64 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
 import BookmarkAddedIcon from '@mui/icons-material/BookmarkAdded'
 
-async function saveToRecipes(selectedMeal, groceryList) {
-  const res = await fetch('/api/recipes', {
+async function extractAndSaveRecipe(url, onStatus) {
+  const res = await fetch('/api/recipes/extract-from-url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: selectedMeal.name,
-      url: selectedMeal.recipe_url || null,
-      notes: selectedMeal.description || null,
-      instructions: [],
-    }),
+    body: JSON.stringify({ url }),
   })
-  if (!res.ok) throw new Error('Failed to create recipe')
-  const recipe = await res.json()
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Extraction failed')
+  }
 
-  await Promise.all(
-    groceryList.map(item =>
-      fetch(`/api/recipes/${recipe.id}/ingredients`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: item.name, amount: item.amount || null, unit: item.unit || null }),
-      })
-    )
-  )
-  return recipe
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let currentEvent = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        currentEvent = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        try {
+          const data = JSON.parse(line.slice(5).trim())
+          if (currentEvent === 'status') onStatus(data.message)
+          else if (currentEvent === 'recipe_extracted') return data.recipe
+          else if (currentEvent === 'error') throw new Error(data.message)
+        } catch (e) {
+          if (e.message !== 'Unexpected end of JSON input') throw e
+        }
+      }
+    }
+  }
+  throw new Error('Recipe extraction completed but no recipe was saved')
 }
 
 export default function CompletionScreen({ data, onReset }) {
   const { selected_meal, grocery_list, reminders_added } = data
   const [saveState, setSaveState] = useState('idle') // 'idle' | 'saving' | 'saved' | 'error'
   const [savedRecipeId, setSavedRecipeId] = useState(null)
+  const [saveStatus, setSaveStatus] = useState('')
 
   async function handleSave() {
     setSaveState('saving')
+    setSaveStatus('')
     try {
-      const recipe = await saveToRecipes(selected_meal, grocery_list)
+      const recipe = await extractAndSaveRecipe(
+        selected_meal.recipe_url,
+        msg => setSaveStatus(msg),
+      )
       setSavedRecipeId(recipe.id)
       setSaveState('saved')
-    } catch {
+    } catch (e) {
+      setSaveStatus(e.message)
       setSaveState('error')
     }
   }
@@ -94,7 +114,7 @@ export default function CompletionScreen({ data, onReset }) {
                 size="small"
                 startIcon={saveState === 'saved' ? <BookmarkAddedIcon /> : <BookmarkAddIcon />}
                 onClick={handleSave}
-                disabled={saveState === 'saving' || saveState === 'saved'}
+                disabled={saveState === 'saving' || saveState === 'saved' || !selected_meal.recipe_url}
                 color={saveState === 'saved' ? 'success' : 'primary'}
                 sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
               >
@@ -102,9 +122,14 @@ export default function CompletionScreen({ data, onReset }) {
               </Button>
             </Box>
 
+            {saveState === 'saving' && saveStatus && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {saveStatus}
+              </Typography>
+            )}
             {saveState === 'error' && (
               <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSaveState('idle')}>
-                Failed to save recipe. Try again.
+                {saveStatus || 'Failed to save recipe. Try again.'}
               </Alert>
             )}
             {saveState === 'saved' && savedRecipeId && (
