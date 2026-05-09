@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Box, Typography, TextField, Button, Divider, List, ListItem,
   ListItemText, ListItemSecondaryAction, IconButton, CircularProgress,
-  Alert, Paper, Stack, Autocomplete, Chip,
+  Alert, Paper, Stack, Autocomplete, Chip, Dialog, DialogTitle,
+  DialogContent, DialogActions, ListItemButton, Checkbox,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -100,8 +101,30 @@ export default function RecipeDetail({ recipeId }) {
 
   // Add to working list
   const [listDialog, setListDialog] = useState({ open: false, lists: [], submitting: false })
+  const [ingSelectDialog, setIngSelectDialog] = useState(false)
+  const [ingSelection, setIngSelection] = useState(new Set())
 
-  const handleOpenListDialog = async () => {
+  const excludedKey = `recipe_ing_excluded_${recipeId}`
+
+  const openIngSelectDialog = () => {
+    const excluded = new Set(JSON.parse(localStorage.getItem(excludedKey) || '[]'))
+    setIngSelection(new Set((recipe.ingredients || []).map(i => i.id).filter(id => !excluded.has(id))))
+    setIngSelectDialog(true)
+  }
+
+  const toggleIngredient = (id) => {
+    setIngSelection(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleIngSelectionConfirm = async () => {
+    const allIds = (recipe.ingredients || []).map(i => i.id)
+    localStorage.setItem(excludedKey, JSON.stringify(allIds.filter(id => !ingSelection.has(id))))
+    setIngSelectDialog(false)
     const res = await fetch('/api/working-lists')
     const lists = res.ok ? await res.json() : []
     setListDialog({ open: true, lists, submitting: false })
@@ -121,7 +144,7 @@ export default function RecipeDetail({ recipeId }) {
         const created = await res.json()
         listId = created.id
       }
-      const ingredients = recipe.ingredients || []
+      const ingredients = (recipe.ingredients || []).filter(ing => ingSelection.has(ing.id))
       await Promise.all(ingredients.map(ing =>
         fetch(`/api/working-lists/${listId}/items`, {
           method: 'POST',
@@ -348,7 +371,7 @@ export default function RecipeDetail({ recipeId }) {
           size="small"
           variant="outlined"
           startIcon={<ShoppingCartIcon />}
-          onClick={handleOpenListDialog}
+          onClick={openIngSelectDialog}
           disabled={!(recipe.ingredients?.length)}
         >
           Add to List
@@ -429,10 +452,45 @@ export default function RecipeDetail({ recipeId }) {
         </Button>
       </Box>
 
+      <Dialog open={ingSelectDialog} onClose={() => setIngSelectDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Select Ingredients to Add</DialogTitle>
+        <DialogContent sx={{ pb: 0 }}>
+          <List dense disablePadding>
+            {(recipe?.ingredients || []).map(ing => {
+              const label = [ing.amount, ing.unit].filter(Boolean).join(' ')
+              return (
+                <ListItem key={ing.id} disablePadding>
+                  <ListItemButton onClick={() => toggleIngredient(ing.id)} dense>
+                    <Checkbox
+                      edge="start"
+                      checked={ingSelection.has(ing.id)}
+                      tabIndex={-1}
+                      disableRipple
+                      size="small"
+                    />
+                    <ListItemText primary={ing.name} secondary={label || undefined} />
+                  </ListItemButton>
+                </ListItem>
+              )
+            })}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIngSelectDialog(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleIngSelectionConfirm}
+            disabled={ingSelection.size === 0}
+          >
+            Continue ({ingSelection.size})
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <AddToWorkingListDialog
         open={listDialog.open}
         onClose={() => setListDialog(prev => ({ ...prev, open: false }))}
-        itemCount={recipe.ingredients?.length || 0}
+        itemCount={ingSelection.size}
         workingLists={listDialog.lists}
         onConfirm={handleAddToList}
         submitting={listDialog.submitting}
